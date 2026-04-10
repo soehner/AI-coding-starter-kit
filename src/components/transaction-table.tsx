@@ -20,7 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, ArrowUpDown, ArrowUp, ArrowDown, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import type { Transaction } from "@/lib/types"
+import { InlineEditField } from "@/components/inline-edit-field"
+import type { Transaction, EditableTransactionField } from "@/lib/types"
 
 interface TransactionTableProps {
   transactions: Transaction[]
@@ -30,8 +31,10 @@ interface TransactionTableProps {
   totalPages: number
   sortBy: string
   sortDir: string
+  canEdit: boolean
   onSort: (field: string) => void
   onPageChange: (page: number) => void
+  onUpdateTransaction?: (id: string, field: EditableTransactionField, value: string) => Promise<void>
 }
 
 function formatCurrency(value: number): string {
@@ -80,6 +83,7 @@ function SkeletonRows() {
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
           <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
+          <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
         </TableRow>
       ))}
     </>
@@ -94,8 +98,10 @@ export function TransactionTable({
   totalPages,
   sortBy,
   sortDir,
+  canEdit,
   onSort,
   onPageChange,
+  onUpdateTransaction,
 }: TransactionTableProps) {
   if (error) {
     return (
@@ -104,6 +110,16 @@ export function TransactionTable({
         <AlertDescription>{error}</AlertDescription>
       </Alert>
     )
+  }
+
+  const handleFieldSave = async (
+    transactionId: string,
+    field: EditableTransactionField,
+    newValue: string
+  ) => {
+    if (onUpdateTransaction) {
+      await onUpdateTransaction(transactionId, field, newValue)
+    }
   }
 
   return (
@@ -151,7 +167,8 @@ export function TransactionTable({
                 </TableHead>
                 <TableHead className="w-[120px] text-right">Ausgabe</TableHead>
                 <TableHead className="w-[120px] text-right">Saldo</TableHead>
-                <TableHead className="hidden w-[150px] lg:table-cell">Bemerkung</TableHead>
+                <TableHead className="hidden w-[180px] lg:table-cell">Bemerkung</TableHead>
+                <TableHead className="hidden w-[120px] xl:table-cell">Beleg-Ref.</TableHead>
                 <TableHead className="hidden w-[100px] xl:table-cell">
                   <span className="flex items-center gap-1">
                     <FileText className="h-3 w-3" aria-hidden="true" />
@@ -166,7 +183,7 @@ export function TransactionTable({
               ) : transactions.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="h-32 text-center text-muted-foreground"
                   >
                     Keine Buchungen gefunden. Passen Sie die Filter an oder importieren Sie Kontoauszüge.
@@ -179,12 +196,25 @@ export function TransactionTable({
 
                   return (
                     <TableRow key={t.id}>
+                      {/* Datum - schreibgeschützt */}
                       <TableCell className="whitespace-nowrap text-sm">
                         {formatDate(t.booking_date)}
                       </TableCell>
-                      <TableCell className="max-w-[300px] truncate text-sm" title={t.description}>
-                        {t.description}
+
+                      {/* Buchungstext - editierbar */}
+                      <TableCell className="max-w-[300px] text-sm">
+                        <InlineEditField
+                          value={t.description}
+                          onSave={(val) => handleFieldSave(t.id, "description", val)}
+                          canEdit={canEdit}
+                          maxLength={500}
+                          required
+                          label="Buchungstext"
+                          placeholder="Buchungstext eingeben"
+                        />
                       </TableCell>
+
+                      {/* Einnahme - schreibgeschützt */}
                       <TableCell className="whitespace-nowrap text-right text-sm">
                         {isIncome ? (
                           <span className="font-medium text-green-600">
@@ -192,6 +222,8 @@ export function TransactionTable({
                           </span>
                         ) : null}
                       </TableCell>
+
+                      {/* Ausgabe - schreibgeschützt */}
                       <TableCell className="whitespace-nowrap text-right text-sm">
                         {!isIncome ? (
                           <span className="font-medium text-red-600">
@@ -199,14 +231,47 @@ export function TransactionTable({
                           </span>
                         ) : null}
                       </TableCell>
+
+                      {/* Saldo - schreibgeschützt */}
                       <TableCell className="whitespace-nowrap text-right text-sm font-medium">
                         {formatCurrency(Number(t.balance_after))}
                       </TableCell>
-                      <TableCell className="hidden max-w-[150px] truncate text-sm text-muted-foreground lg:table-cell" title={t.note || ""}>
-                        {t.note || "-"}
+
+                      {/* Bemerkung - editierbar (Textarea) */}
+                      <TableCell className="hidden max-w-[180px] lg:table-cell">
+                        <InlineEditField
+                          value={t.note || ""}
+                          onSave={(val) => handleFieldSave(t.id, "note", val)}
+                          canEdit={canEdit}
+                          multiline
+                          maxLength={1000}
+                          label="Bemerkung"
+                          placeholder="Bemerkung hinzufügen"
+                        />
                       </TableCell>
-                      <TableCell className="hidden whitespace-nowrap text-sm text-muted-foreground xl:table-cell">
-                        {t.bank_statements?.statement_number || "-"}
+
+                      {/* Beleg-Referenz - editierbar */}
+                      <TableCell className="hidden max-w-[120px] xl:table-cell">
+                        <InlineEditField
+                          value={t.document_ref || ""}
+                          onSave={(val) => handleFieldSave(t.id, "document_ref", val)}
+                          canEdit={canEdit}
+                          maxLength={255}
+                          label="Beleg-Referenz"
+                          placeholder="Beleg-Ref."
+                        />
+                      </TableCell>
+
+                      {/* Kontoauszug-Referenz - editierbar */}
+                      <TableCell className="hidden max-w-[120px] xl:table-cell">
+                        <InlineEditField
+                          value={t.statement_ref || ""}
+                          onSave={(val) => handleFieldSave(t.id, "statement_ref", val)}
+                          canEdit={canEdit}
+                          maxLength={255}
+                          label="Kontoauszug-Referenz"
+                          placeholder={t.bank_statements?.statement_number || "Auszug-Ref."}
+                        />
                       </TableCell>
                     </TableRow>
                   )
