@@ -63,7 +63,112 @@ Typisches Format (aus den vorliegenden PDFs abgeleitet):
 <!-- Abschnitte unten werden von nachfolgenden Skills hinzugefügt -->
 
 ## Technisches Design (Solution Architect)
-_Wird von /architecture hinzugefügt_
+
+### Komponentenstruktur
+
+```
+/dashboard/admin/import        (nur Admins, Hauptseite)
++-- Import-Seite
+    +-- [Wenn kein API-Token konfiguriert]
+    |   +-- Hinweis-Banner: "KI-Token fehlt" + Link zu Einstellungen
+    +-- Upload-Bereich (Drag & Drop oder Datei-Button)
+    |   +-- Datei-Auswahl (nur PDF erlaubt)
+    |   +-- Upload-Button (deaktiviert ohne API-Token)
+    |   +-- Fortschrittsanzeige (Schritte: Hochladen → KI parst → Fertig)
+    +-- Vorschau-Tabelle (nach erfolgreichem Parsing)
+    |   +-- Zusammenfassung (erkannte Buchungen, Datumsbereich, Anfangs-/Endsaldo)
+    |   +-- Tabelle der Buchungen (Datum, Text, Betrag, Saldo)
+    |       +-- Zeile: bearbeitbar (Betrag / Text korrigierbar)
+    |       +-- Zeile: löschbar (einzelne Buchung entfernen)
+    |   +-- Duplikat-Warnungen (orange hervorgehoben)
+    |   +-- "Speichern"- und "Abbrechen"-Button
+    +-- Importierte Kontoauszüge (Liste am Ende)
+        +-- Tabellenzeile: Dateiname, Datum, Anzahl Buchungen, importiert von
+
+/dashboard/admin/settings      (nur Admins, Einstellungsseite)
++-- Einstellungs-Seite
+    +-- Abschnitt "KI-Konfiguration"
+        +-- Auswahlfeld: KI-Provider (OpenAI / Anthropic Claude)
+        +-- Texteingabe: API-Token (verschleiert)
+        +-- "Token testen"-Button
+        +-- Status-Anzeige: "Token gültig ✓" oder Fehlermeldung
+        +-- Speichern-Button
+```
+
+### Verarbeitungsablauf
+
+```
+Admin wählt PDF → PDF wird zu Supabase Storage hochgeladen (Archiv)
+               → PDF wird an API-Route geschickt
+               → Server ruft KI-API auf (mit dem gespeicherten Token)
+               → KI liefert strukturierte Buchungsliste zurück
+               → Vorschau wird im Browser angezeigt
+               → Admin prüft, korrigiert ggf.
+               → Admin klickt "Speichern"
+               → Buchungen werden in Tabelle transactions gespeichert
+               → Metadaten werden in Tabelle bank_statements gespeichert
+```
+
+### Datenmodell
+
+**Neue Tabelle `app_settings`:**
+- Schlüssel (z. B. "ki_provider", "ki_token")
+- Wert (verschlüsselt für API-Token)
+- Wer hat es zuletzt geändert + wann
+
+**Neue Tabelle `bank_statements`:**
+- Dateiname der PDF, Kontoauszugsnummer
+- Zeitraum (Anfangs- und Enddatum)
+- Anzahl der Buchungen
+- Pfad zur gespeicherten PDF-Datei
+- Wer hat es importiert + wann
+
+**Neue Tabelle `transactions`:**
+- Verknüpfung zu bank_statements
+- Buchungsdatum + Wertstellungsdatum
+- Buchungstext / Verwendungszweck
+- Betrag (positiv = Eingang, negativ = Ausgang)
+- Saldo nach der Buchung
+- Kategorie + Bemerkung (optional, für spätere Features)
+
+**PDF-Dateien:** Supabase Storage, privater Bucket "bank-statements"
+
+### Neue Bausteine
+
+**Neue Seiten:**
+- `/dashboard/admin/import` – Upload & Vorschau-Seite
+- `/dashboard/admin/settings` – KI-Token Einstellungsseite
+
+**Neue API-Endpunkte (serverseitig, nur Admins):**
+- `POST /api/admin/import` – PDF empfangen, an KI senden, Buchungen zurückliefern
+- `POST /api/admin/import/confirm` – Vorschau bestätigen, in DB speichern
+- `GET /api/admin/import/statements` – Liste importierter Kontoauszüge
+- `GET /api/admin/settings` – KI-Einstellungen lesen
+- `POST /api/admin/settings` – KI-Einstellungen speichern
+- `POST /api/admin/settings/test` – API-Token validieren
+
+**Neue UI-Komponenten:**
+- `PdfUploadZone` – Drag & Drop Bereich (nutzt: Button, Progress)
+- `TransactionPreviewTable` – bearbeitbare Vorschau-Tabelle (nutzt: Table, Input, Badge)
+- `ApiSettingsForm` – Einstellungsformular (nutzt: Select, Input, Button)
+
+### Technische Entscheidungen
+
+| Entscheidung | Warum |
+|---|---|
+| KI-API serverseitig | API-Token darf nie im Browser sichtbar sein |
+| Zwei KI-Anbieter (OpenAI / Anthropic) | Admin wählt, welchen er bereits hat |
+| API-Token in Datenbank (verschlüsselt) | Admin kann Token selbst konfigurieren ohne Vercel-Zugriff |
+| Vorschau vor dem Speichern | Parsing-Fehler werden sichtbar bevor Daten gespeichert werden |
+| PDF in Supabase Storage | Archiv für Prüfungszwecke; bereits in Infrastruktur vorhanden |
+
+### Abhängigkeiten (neue Pakete)
+
+| Paket | Zweck |
+|---|---|
+| `openai` | OpenAI API SDK (Vision / Responses API) |
+| `@anthropic-ai/sdk` | Anthropic Claude API SDK |
+| `pdfjs-dist` | PDF-Seiten als Bilder für Vision-APIs rendern |
 
 ## QA-Testergebnisse
 _Wird von /qa hinzugefügt_
