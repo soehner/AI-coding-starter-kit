@@ -43,7 +43,67 @@
 <!-- Abschnitte unten werden von nachfolgenden Skills hinzugefügt -->
 
 ## Technisches Design (Solution Architect)
-_Wird von /architecture hinzugefügt_
+
+### Komponentenstruktur
+
+```
+/dashboard/admin/users  (nur für Admins sichtbar)
++-- Benutzerverwaltungs-Seite
+    +-- Seitenkopf ("Benutzerverwaltung" + "Benutzer einladen"-Button)
+    +-- Benutzertabelle
+    |   +-- Tabellenzeile pro Benutzer
+    |       +-- Name / E-Mail
+    |       +-- Rolle (Admin / Betrachter) – änderbar via Dropdown
+    |       +-- Status (Aktiv / Eingeladen)
+    |       +-- Registrierungsdatum
+    |       +-- Aktionen (Rolle ändern, Benutzer löschen)
+    +-- "Benutzer einladen"-Dialog (Modal)
+        +-- Eingabefeld: E-Mail-Adresse
+        +-- Auswahlfeld: Rolle (Admin / Betrachter)
+        +-- Absenden-Button
+        +-- Fehlermeldung (z.B. E-Mail bereits vorhanden)
+```
+
+### Datenmodell
+
+Kein neues Datenbankschema nötig – PROJ-1 hat alle benötigten Tabellen angelegt.
+
+**Tabelle `user_profiles` (bereits vorhanden):**
+- Eindeutige ID (verknüpft mit dem Auth-Konto)
+- E-Mail-Adresse
+- Vollständiger Name
+- Rolle: "admin" oder "viewer"
+- Erstellt am: Datum der Einladung/Registrierung
+
+**Supabase Auth (bereits vorhanden):**
+- Verwaltet Anmeldedaten, Passwörter und Einladungslinks automatisch
+
+### Neue Bausteine
+
+**Neue Seite:**
+- `/dashboard/admin/users` – Benutzerverwaltungsseite (nur für Admins)
+
+**Neue API-Endpunkte (serverseitig, nur für Admins):**
+- `POST /api/admin/invite` – Benutzer per E-Mail einladen
+- `PATCH /api/admin/users/[id]` – Rolle eines Benutzers ändern
+- `DELETE /api/admin/users/[id]` – Benutzer löschen
+
+**Neue UI-Komponenten:**
+- `InviteUserDialog` – Modal zum Einladen (nutzt: Dialog, Form, Input, Select, Button)
+- `UsersTable` – Tabelle mit allen Benutzern (nutzt: Table, Badge, DropdownMenu)
+
+### Technische Entscheidungen
+
+| Entscheidung | Warum |
+|---|---|
+| Supabase Admin-Funktion für Einladungen | Automatischer Versand von Einladungs-E-Mails mit sicherem Aktivierungslink – kein eigener E-Mail-Dienst nötig |
+| Serverseitige API-Routen | Admin-Schlüssel darf niemals im Browser sichtbar sein |
+| Rollenänderung sofort wirksam | Rolle wird direkt in der DB geändert; neue Berechtigung greift beim nächsten Seitenaufruf automatisch |
+| Selbstschutz-Regel | Admins können sich nicht selbst löschen oder degradieren – verhindert versehentliches Aussperren |
+
+### Abhängigkeiten
+
+Keine neuen Pakete nötig – alle shadcn/ui-Komponenten (Dialog, Table, Select, Badge, DropdownMenu) sind bereits installiert.
 
 ## QA-Testergebnisse
 _Wird von /qa hinzugefügt_
