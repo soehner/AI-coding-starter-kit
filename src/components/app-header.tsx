@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PasswordChangeDialog } from "@/components/password-change-dialog"
 import { LogOut, User } from "lucide-react"
 
 function getInitials(email: string): string {
@@ -31,7 +32,7 @@ function getRoleLabel(role: string): string {
 }
 
 export function AppHeader() {
-  const { user, profile, isLoading, signOut } = useAuth()
+  const { user, profile, isLoading, signOut, updatePassword } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -84,6 +85,10 @@ export function AppHeader() {
                     <User className="mr-2 h-4 w-4" />
                     {getRoleLabel(profile.role)}
                   </DropdownMenuItem>
+                  <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
+                    <PasswordChangeDialog onUpdatePassword={updatePassword} />
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={signOut}
                     className="text-destructive focus:text-destructive"

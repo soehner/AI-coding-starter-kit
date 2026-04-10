@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase"
 import type { User } from "@supabase/supabase-js"
 import type { UserProfile } from "@/lib/types"
@@ -20,13 +20,14 @@ export function useAuth() {
     error: null,
   })
 
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
 
   const fetchProfile = useCallback(
-    async (userId: string) => {
+    async (userId: string): Promise<UserProfile | null> => {
       const { data, error } = await supabase
         .from("user_profiles")
-        .select("*")
+        .select("id, email, role, created_at")
         .eq("id", userId)
         .single()
 
@@ -52,7 +53,7 @@ export function useAuth() {
             user: session.user,
             profile,
             isLoading: false,
-            error: null,
+            error: profile ? null : "Profil konnte nicht geladen werden.",
           })
         } else {
           setState({ user: null, profile: null, isLoading: false, error: null })
@@ -78,7 +79,7 @@ export function useAuth() {
           user: session.user,
           profile,
           isLoading: false,
-          error: null,
+          error: profile ? null : "Profil konnte nicht geladen werden.",
         })
       } else {
         setState({ user: null, profile: null, isLoading: false, error: null })
@@ -95,9 +96,20 @@ export function useAuth() {
     window.location.assign("/login")
   }, [supabase])
 
+  const updatePassword = useCallback(
+    async (newPassword: string) => {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      })
+      if (error) throw error
+    },
+    [supabase]
+  )
+
   return {
     ...state,
     signOut,
+    updatePassword,
     isAdmin: state.profile?.role === "admin",
     isViewer: state.profile?.role === "viewer",
   }
