@@ -1,6 +1,6 @@
 # PROJ-5: Eintragsbearbeitung & Bemerkungen
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
 **Zuletzt aktualisiert:** 2026-04-10
 
@@ -342,4 +342,8 @@ Keine neuen Pakete erforderlich — alle benötigten Komponenten sind bereits in
 - **Empfehlung:** Deployen. Verbleibende niedrige Bugs (BUG-2, BUG-3, BUG-5) können im nächsten Sprint behoben werden.
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+- **Produktions-URL:** https://cbs-finanz.vercel.app
+- **Deployt am:** 2026-04-10
+- **Commit:** 0663b72 (feat(PROJ-5): Eintragsbearbeitung & Bemerkungen implementiert)
+- **Datenbank-Migration:** 005_proj5_edit_fields.sql erfolgreich angewandt
