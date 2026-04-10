@@ -10,13 +10,15 @@ import { TransactionTable } from "@/components/transaction-table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
+import { toast } from "sonner"
 import type {
   TransactionSummary,
   Transaction,
+  EditableTransactionField,
 } from "@/lib/types"
 
 export default function DashboardPage() {
-  const { profile, isLoading: authLoading, error: authError } = useAuth()
+  const { profile, isLoading: authLoading, error: authError, isAdmin } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -148,6 +150,55 @@ export default function DashboardPage() {
     fetchTransactions()
   }, [year, month, debouncedSearch, page, sortBy, sortDir, authLoading])
 
+  // PROJ-5: Optimistic Update für Inline-Bearbeitung
+  const handleUpdateTransaction = useCallback(
+    async (id: string, field: EditableTransactionField, value: string) => {
+      // Alten Wert merken für Rollback
+      const oldTransactions = [...transactions]
+      const transactionIndex = transactions.findIndex((t) => t.id === id)
+      if (transactionIndex === -1) return
+
+      // Optimistic Update
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.id === id ? { ...t, [field]: value || null } : t
+        )
+      )
+
+      try {
+        const res = await fetch(`/api/transactions/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ [field]: value }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json()
+          throw new Error(data.error || "Fehler beim Speichern")
+        }
+
+        // Erfolgreich - aktualisierte Daten vom Server übernehmen
+        const updated: Transaction = await res.json()
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === id ? updated : t))
+        )
+
+        toast.success("Gespeichert")
+      } catch (err) {
+        // Rollback auf alten Wert
+        setTransactions(oldTransactions)
+
+        const message =
+          err instanceof Error ? err.message : "Fehler beim Speichern"
+        toast.error(message)
+
+        // Fehler weiterwerfen, damit InlineEditField im Bearbeitungsmodus bleibt
+        throw err
+      }
+    },
+    [transactions]
+  )
+
   // Filter-Handler
   const handleYearChange = (value: string) => {
     setYear(value)
@@ -253,8 +304,10 @@ export default function DashboardPage() {
         totalPages={totalPages}
         sortBy={sortBy}
         sortDir={sortDir}
+        canEdit={isAdmin}
         onSort={handleSort}
         onPageChange={handlePageChange}
+        onUpdateTransaction={handleUpdateTransaction}
       />
     </div>
   )

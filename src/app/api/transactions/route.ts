@@ -85,6 +85,10 @@ export async function GET(request: Request) {
         balance_after,
         category,
         note,
+        document_ref,
+        statement_ref,
+        updated_at,
+        updated_by,
         statement_id,
         bank_statements!inner(statement_number, file_name)
       `,

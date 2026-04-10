@@ -58,11 +58,23 @@ export interface Transaction {
   balance_after: number
   category: string | null
   note: string | null
+  document_ref: string | null
+  statement_ref: string | null
+  updated_at: string | null
+  updated_by: string | null
   statement_id: string
   bank_statements: {
     statement_number: string
     file_name: string
   }
+}
+
+// PROJ-5: Bearbeitbare Felder
+export type EditableTransactionField = "description" | "note" | "document_ref" | "statement_ref"
+
+export interface TransactionUpdatePayload {
+  field: EditableTransactionField
+  value: string
 }
 
 export interface TransactionSummary {
