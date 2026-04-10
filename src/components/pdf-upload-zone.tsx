@@ -267,7 +267,7 @@ export function PdfUploadZone({ hasApiToken, onParseComplete }: PdfUploadZonePro
                 disabled={isProcessing}
                 aria-label="Auswahl zurücksetzen"
               >
-                Zuruecksetzen
+                Zurücksetzen
               </Button>
             )}
           </div>
