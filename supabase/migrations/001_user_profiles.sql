@@ -16,30 +16,33 @@ create index idx_user_profiles_email on public.user_profiles(email);
 -- Row Level Security aktivieren
 alter table public.user_profiles enable row level security;
 
+-- Hilfsfunktion: Prüft ob der aktuelle Benutzer Admin ist
+-- SECURITY DEFINER umgeht RLS und verhindert Rekursion
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.user_profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
 -- Policy: Benutzer sieht eigenes Profil
 create policy "Benutzer sieht eigenes Profil"
   on public.user_profiles for select
   using (auth.uid() = id);
 
--- Policy: Admins sehen alle Profile (fuer PROJ-2 Benutzerverwaltung)
+-- Policy: Admins sehen alle Profile (über is_admin() ohne Rekursion)
 create policy "Admins sehen alle Profile"
   on public.user_profiles for select
-  using (
-    exists (
-      select 1 from public.user_profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
+  using (public.is_admin());
 
--- Policy: Admins koennen Profile aktualisieren (fuer PROJ-2 Rollenverwaltung)
+-- Policy: Admins können Profile aktualisieren (über is_admin() ohne Rekursion)
 create policy "Admins aktualisieren Profile"
   on public.user_profiles for update
-  using (
-    exists (
-      select 1 from public.user_profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
+  using (public.is_admin());
 
 -- Trigger-Funktion: Automatisch Profil anlegen bei neuem Auth-Benutzer
 -- Erster Benutzer wird Admin, alle weiteren Viewer
