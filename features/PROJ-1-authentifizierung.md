@@ -1,8 +1,10 @@
 # PROJ-1: Authentifizierung & Benutzerverwaltung
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
 **Zuletzt aktualisiert:** 2026-04-10
+**Produktions-URL:** https://cbs-finanz.vercel.app
+**Deployed:** 2026-04-10
 
 ## Abhängigkeiten
 - Keine (Basis-Feature)
