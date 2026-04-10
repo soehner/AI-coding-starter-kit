@@ -1,29 +1,50 @@
 # Product Requirements Document
 
 ## Vision
-_Describe what you are building and why._
+**CBS-Finanz** ist eine Web-Applikation für den CBS-Mannheim Förderverein, die den manuellen Prozess der Kassenbuchführung digitalisiert. Kontoauszüge der Badischen Beamtenbank werden als PDF hochgeladen, automatisch geparst und in einer Datenbank gespeichert. Die Anwendung ersetzt die händische Übertragung in Excel-Kassenbücher und ermöglicht kollaboratives Arbeiten mit rollenbasiertem Zugriffsschutz.
 
 ## Target Users
-_Who will use this product? Describe their needs and pain points._
+
+### Administrator (Kassenwart)
+- Verwaltet die Finanzen des Fördervereins
+- Lädt Kontoauszüge hoch und überprüft die geparsten Daten
+- Bearbeitet Felder und fügt Bemerkungen hinzu
+- Exportiert das Kassenbuch als Excel
+- Verwaltet Benutzer und deren Rollen
+
+### Betrachter (Vorstandsmitglieder, Prüfer)
+- Möchte jederzeit einen aktuellen Überblick über die Finanzen
+- Hat nur Lesezugriff – kein Bearbeiten, kein Exportieren
+- Wird per E-Mail-Einladung in die Anwendung aufgenommen
 
 ## Core Features (Roadmap)
 
 | Priority | Feature | Status |
 |----------|---------|--------|
-| P0 (MVP) | _Feature 1_ | Planned |
-| P0 (MVP) | _Feature 2_ | Planned |
-| P1 | _Feature 3_ | Planned |
-| P2 | _Feature 4_ | Planned |
+| P0 (MVP) | PROJ-1: Authentifizierung & Benutzerverwaltung | Planned |
+| P0 (MVP) | PROJ-2: Benutzereinladung & Rollenverwaltung | Planned |
+| P0 (MVP) | PROJ-3: PDF-Kontoauszug-Upload & Parsing | Planned |
+| P0 (MVP) | PROJ-4: Bankbewegungen-Übersicht (Dashboard) | Planned |
+| P1 | PROJ-5: Eintragsbearbeitung & Bemerkungen | Planned |
+| P1 | PROJ-6: Kassenbuch-Export (Excel) | Planned |
+| P1 | PROJ-7: Granulare Feature-Berechtigungen | Planned |
+| P1 | PROJ-8: Zwei-Faktor-Authentifizierung (2FA) | Planned |
 
 ## Success Metrics
-_How will you measure success? (e.g., user signups, retention, task completion rate)_
+- Zeiteinsparung: Manuelles Übertragen entfällt (aktuell ~30 Min pro Kontoauszug)
+- Fehlerreduktion: Kein manuelles Abtippen mehr
+- Zugänglichkeit: Vorstandsmitglieder können jederzeit den Kontostand einsehen
+- Akzeptanz: Kassenwart nutzt die App für alle zukünftigen Kontoauszüge
 
 ## Constraints
-_Budget, timeline, technical limitations, team size._
+- Technologie: Next.js + Supabase + Vercel + GitHub (vorgegeben)
+- Bank: Badische Beamtenbank (BW-Bank) – spezifisches PDF-Format
+- Team: Einzelentwickler
+- PDF-Parsing: Ausschließlich KI-basiert (OpenAI Vision oder Anthropic Claude API). API-Token wird vom Administrator in den App-Einstellungen konfiguriert (Pflichtfeld für PDF-Import)
 
 ## Non-Goals
-_What are you explicitly NOT building in this version?_
-
----
-
-Use `/requirements` to create detailed feature specifications for each item in the roadmap above.
+- Keine Buchhaltungssoftware (keine DATEV-Integration)
+- Keine Mitgliederverwaltung (separates System)
+- Keine Belegverwaltung (Belege bleiben als separate PDFs)
+- Keine Mobile App (responsive Web reicht)
+- Keine automatische Verzeichnis-Überwachung (manueller Upload)
