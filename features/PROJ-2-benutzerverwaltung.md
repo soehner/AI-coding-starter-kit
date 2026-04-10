@@ -1,6 +1,6 @@
 # PROJ-2: Benutzereinladung & Rollenverwaltung
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
 **Zuletzt aktualisiert:** 2026-04-10
 
@@ -319,4 +319,8 @@ Keine neuen Pakete nötig – alle shadcn/ui-Komponenten (Dialog, Table, Select,
 - **Empfehlung:** Feature kann deployt werden. Die 3 verbleibenden niedrigen Bugs (BUG-2, BUG-5, BUG-6) koennen im naechsten Sprint behoben werden.
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+**Deployt:** 2026-04-10
+**Produktions-URL:** https://cbs-finanz.vercel.app
+**Umgebung:** Vercel (soehners-projects/cbs-finanz)
+**Neue Umgebungsvariable:** `SUPABASE_SERVICE_ROLE_KEY` in Vercel gesetzt (production + preview)
