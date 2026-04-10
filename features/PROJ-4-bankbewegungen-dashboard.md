@@ -52,7 +52,64 @@ Die Übersicht soll dieselbe Struktur haben wie das Excel-Kassenbuch:
 <!-- Abschnitte unten werden von nachfolgenden Skills hinzugefügt -->
 
 ## Technisches Design (Solution Architect)
-_Wird von /architecture hinzugefügt_
+
+### Ausgangslage
+Kein neues Datenbankschema erforderlich. Alle Daten liegen bereits in `transactions` und `bank_statements` (aus PROJ-3).
+
+### Komponentenstruktur
+
+```
+Dashboard-Seite (/dashboard)
++-- KPI-Leiste (3 Kennzahlen nebeneinander)
+|   +-- Karte: Aktueller Kontostand
+|   +-- Karte: Summe Einnahmen (gewählter Zeitraum)
+|   +-- Karte: Summe Ausgaben (gewählter Zeitraum)
+|
++-- Filter-Leiste
+|   +-- Jahr-Dropdown (nur Jahre mit Daten)
+|   +-- Monat-Dropdown (optional, "Alle Monate")
+|   +-- Suchfeld (Buchungstext, 300ms debounced)
+|
++-- Buchungs-Tabelle
+|   +-- Tabellenkopf (klickbar zum Sortieren)
+|   |   Datum | Buchungstext | Einnahme | Ausgabe | Saldo | Bemerkung | Beleg | Kontoauszug
+|   +-- Tabellenzeilen (Einnahmen grün, Ausgaben rot)
+|   +-- Leerer Zustand ("Keine Buchungen gefunden")
+|   +-- Lade-Zustand (Skeleton-Zeilen)
+|
++-- Pagination-Leiste (50 Einträge pro Seite)
+```
+
+### Neue Dateien
+
+| Datei | Typ | Zweck |
+|-------|-----|-------|
+| `src/app/dashboard/page.tsx` | Änderung | Hauptseite wird zur Kassenbuch-Übersicht |
+| `src/components/kpi-cards.tsx` | Neu | Die 3 Kennzahl-Karten oben |
+| `src/components/transaction-filter-bar.tsx` | Neu | Jahr/Monat/Suche-Steuerung |
+| `src/components/transaction-table.tsx` | Neu | Die sortierbare, paginierte Tabelle |
+| `src/app/api/transactions/route.ts` | Neu | Buchungsliste mit Filter/Sort/Pagination |
+| `src/app/api/transactions/summary/route.ts` | Neu | Aggregierte Summen (Einnahmen, Ausgaben, Saldo) |
+
+### Datenfluss
+
+```
+URL-Parameter (?year=2025&sort=date&page=1)
+    ↓
+/api/transactions/summary  →  KPI-Karten (Saldo, Summen, verfügbare Jahre)
+/api/transactions           →  Tabelle (gefiltert, sortiert, paginiert, 50/Seite)
+```
+
+### Technische Entscheidungen
+
+| Entscheidung | Begründung |
+|---|---|
+| URL-Parameter für Filter | Deeplink-fähig – Links bleiben beim Teilen funktionsfähig |
+| Server-seitige Paginierung | Skaliert bei >1000 Buchungen ohne Performanceprobleme |
+| Separate API für Aggregationen | Summen/Saldo unabhängig von Tabellenansicht ladbar |
+| Debounced Suche (300ms) | Reduziert API-Anfragen während der Eingabe |
+| Natives `useSearchParams` (Next.js) | Kein zusätzliches Paket nötig |
+| Alle shadcn/ui-Komponenten vorhanden | Table, Card, Select, Input, Badge, Skeleton, Pagination – bereits installiert |
 
 ## QA-Testergebnisse
 _Wird von /qa hinzugefügt_
