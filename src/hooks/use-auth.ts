@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback, useRef } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { createClient } from "@/lib/supabase"
 import type { User } from "@supabase/supabase-js"
 import type { UserProfile } from "@/lib/types"
@@ -20,8 +20,7 @@ export function useAuth() {
     error: null,
   })
 
-  const supabaseRef = useRef(createClient())
-  const supabase = supabaseRef.current
+  const supabase = useMemo(() => createClient(), [])
 
   const fetchProfile = useCallback(
     async (userId: string): Promise<UserProfile | null> => {

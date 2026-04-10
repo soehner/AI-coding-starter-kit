@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PasswordChangeDialog } from "@/components/password-change-dialog"
-import { LogOut, User } from "lucide-react"
+import { LogOut, User, Users } from "lucide-react"
+import Link from "next/link"
 
 function getInitials(email: string): string {
   return email.substring(0, 2).toUpperCase()
@@ -32,7 +33,7 @@ function getRoleLabel(role: string): string {
 }
 
 export function AppHeader() {
-  const { user, profile, isLoading, signOut, updatePassword } = useAuth()
+  const { user, profile, isLoading, signOut, updatePassword, isAdmin } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -85,6 +86,14 @@ export function AppHeader() {
                     <User className="mr-2 h-4 w-4" />
                     {getRoleLabel(profile.role)}
                   </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard/admin/users">
+                        <Users className="mr-2 h-4 w-4" />
+                        Benutzerverwaltung
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
                     <PasswordChangeDialog onUpdatePassword={updatePassword} />
                   </DropdownMenuItem>
