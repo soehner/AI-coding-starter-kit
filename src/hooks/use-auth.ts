@@ -1,9 +1,11 @@
 "use client"
 
-import { useEffect, useState, useCallback, useMemo } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { createClient } from "@/lib/supabase"
-import type { User } from "@supabase/supabase-js"
+import type { User, AuthChangeEvent, Session } from "@supabase/supabase-js"
 import type { UserProfile } from "@/lib/types"
+
+const supabase = createClient()
 
 interface AuthState {
   user: User | null
@@ -20,8 +22,6 @@ export function useAuth() {
     error: null,
   })
 
-  const supabase = useMemo(() => createClient(), [])
-
   const fetchProfile = useCallback(
     async (userId: string): Promise<UserProfile | null> => {
       const { data, error } = await supabase
@@ -36,7 +36,7 @@ export function useAuth() {
       }
       return data as UserProfile
     },
-    [supabase]
+    []
   )
 
   useEffect(() => {
@@ -71,7 +71,7 @@ export function useAuth() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
       if (session?.user) {
         const profile = await fetchProfile(session.user.id)
         setState({
@@ -88,12 +88,12 @@ export function useAuth() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, fetchProfile])
+  }, [fetchProfile])
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
     window.location.assign("/login")
-  }, [supabase])
+  }, [])
 
   const updatePassword = useCallback(
     async (newPassword: string) => {
@@ -102,7 +102,7 @@ export function useAuth() {
       })
       if (error) throw error
     },
-    [supabase]
+    []
   )
 
   return {
