@@ -303,4 +303,18 @@ BUG-4, BUG-5 und BUG-6 aus dem Ersttest wurden behoben. Dieser Re-Test verifizie
 - **Empfehlung:** BUG-1 (Mittel) sollte vor Deployment behoben werden - einfacher Fix: `if (month && year)` zu `if (month)` aendern und Monat-Filter unabhaengig vom Jahr anwenden. Alle Niedrig-Bugs sind akzeptabel fuer MVP.
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+**Deployt:** 2026-04-10
+**Produktions-URL:** https://cbs-finanz.vercel.app
+**Git-Tag:** v1.4.0-PROJ-4
+**Plattform:** Vercel (Washington, D.C. – iad1)
+
+**Deployment-Checkliste:**
+- [x] `npm run lint` bestanden
+- [x] `npm run build` erfolgreich
+- [x] Migration 003 (Import-Tabellen) auf Supabase angewendet
+- [x] Migration 004 (Aggregations-RPCs) auf Supabase angewendet
+- [x] Code committed und zu GitHub gepusht
+- [x] Vercel Production-Build erfolgreich
+- [x] Produktions-URL erreichbar: https://cbs-finanz.vercel.app
+- [x] Git-Tag v1.4.0-PROJ-4 erstellt und gepusht
