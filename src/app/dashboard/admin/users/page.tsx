@@ -90,7 +90,7 @@ export default function AdminUsersPage() {
     const data = await response.json()
 
     if (!response.ok) {
-      throw new Error(data.error || "Rolle konnte nicht geaendert werden.")
+      throw new Error(data.error || "Rolle konnte nicht geändert werden.")
     }
 
     // Lokale Liste aktualisieren
@@ -107,7 +107,7 @@ export default function AdminUsersPage() {
     const data = await response.json()
 
     if (!response.ok) {
-      throw new Error(data.error || "Benutzer konnte nicht geloescht werden.")
+      throw new Error(data.error || "Benutzer konnte nicht gelöscht werden.")
     }
 
     // Aus lokaler Liste entfernen

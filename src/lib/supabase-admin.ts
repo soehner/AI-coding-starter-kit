@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 /**
  * Erstellt einen Supabase-Admin-Client mit Service-Role-Key.
  * NUR serverseitig verwenden (API-Routen).
- * Umgeht RLS - daher nur fuer Admin-Operationen einsetzen.
+ * Umgeht RLS - daher nur für Admin-Operationen einsetzen.
  */
 export function createAdminSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -11,7 +11,7 @@ export function createAdminSupabaseClient() {
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error(
-      "Supabase Admin-Umgebungsvariablen fehlen. NEXT_PUBLIC_SUPABASE_URL und SUPABASE_SERVICE_ROLE_KEY muessen gesetzt sein."
+      "Supabase Admin-Umgebungsvariablen fehlen. NEXT_PUBLIC_SUPABASE_URL und SUPABASE_SERVICE_ROLE_KEY müssen gesetzt sein."
     )
   }
 

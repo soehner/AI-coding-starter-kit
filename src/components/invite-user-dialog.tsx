@@ -147,7 +147,7 @@ export function InviteUserDialog({ onInvited }: InviteUserDialogProps) {
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Rolle auswaehlen" />
+                        <SelectValue placeholder="Rolle auswählen" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>

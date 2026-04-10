@@ -45,7 +45,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Eingeloggt und auf oeffentlicher Route -> Redirect zu /dashboard
+  // Eingeloggt und auf öffentlicher Route -> Redirect zu /dashboard
   if (user && isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/dashboard"

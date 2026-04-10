@@ -21,8 +21,8 @@ function isRateLimited(ip: string): boolean {
 }
 
 /**
- * Prueft ob der aktuelle Benutzer authentifiziert und Admin ist.
- * Gibt entweder das Admin-Profil zurueck oder eine Fehler-Response.
+ * Prüft ob der aktuelle Benutzer authentifiziert und Admin ist.
+ * Gibt entweder das Admin-Profil zurück oder eine Fehler-Response.
  */
 export async function requireAdmin(): Promise<
   | { profile: UserProfile; error?: never }
@@ -34,7 +34,7 @@ export async function requireAdmin(): Promise<
   if (isRateLimited(ip)) {
     return {
       error: NextResponse.json(
-        { error: "Zu viele Anfragen. Bitte versuchen Sie es spaeter erneut." },
+        { error: "Zu viele Anfragen. Bitte versuchen Sie es später erneut." },
         { status: 429 }
       ),
     }

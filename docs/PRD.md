@@ -29,6 +29,8 @@
 | P1 | PROJ-6: Kassenbuch-Export (Excel) | Planned |
 | P1 | PROJ-7: Granulare Feature-Berechtigungen | Planned |
 | P1 | PROJ-8: Zwei-Faktor-Authentifizierung (2FA) | Planned |
+| P1 | PROJ-9: Seafile-Integration für Belege & Kontoauszüge | Planned |
+| P1 | PROJ-10: Genehmigungssystem für Vereinsanträge | Planned |
 
 ## Success Metrics
 - Zeiteinsparung: Manuelles Übertragen entfällt (aktuell ~30 Min pro Kontoauszug)
@@ -45,6 +47,6 @@
 ## Non-Goals
 - Keine Buchhaltungssoftware (keine DATEV-Integration)
 - Keine Mitgliederverwaltung (separates System)
-- Keine Belegverwaltung (Belege bleiben als separate PDFs)
+- Keine eigenständige Belegverwaltung (Belege werden über Seafile verlinkt, nicht in der App selbst verwaltet)
 - Keine Mobile App (responsive Web reicht)
 - Keine automatische Verzeichnis-Überwachung (manueller Upload)

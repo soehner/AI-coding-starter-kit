@@ -99,7 +99,7 @@ export function UsersTable({
       await onRoleChange(userId, newRole)
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Rolle konnte nicht geaendert werden."
+        err instanceof Error ? err.message : "Rolle konnte nicht geändert werden."
       )
     } finally {
       setUpdatingRole(null)
@@ -113,7 +113,7 @@ export function UsersTable({
       await onDelete(userId)
     } catch (err) {
       setActionError(
-        err instanceof Error ? err.message : "Benutzer konnte nicht geloescht werden."
+        err instanceof Error ? err.message : "Benutzer konnte nicht gelöscht werden."
       )
     } finally {
       setDeletingUser(null)
@@ -208,7 +208,7 @@ export function UsersTable({
                       >
                         <SelectTrigger
                           className="w-[150px]"
-                          aria-label={`Rolle von ${user.email} aendern`}
+                          aria-label={`Rolle von ${user.email} ändern`}
                         >
                           {isUpdating ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -239,7 +239,7 @@ export function UsersTable({
                             variant="ghost"
                             size="icon"
                             disabled={isDeleting}
-                            aria-label={`${user.email} loeschen`}
+                            aria-label={`${user.email} löschen`}
                           >
                             {isDeleting ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -251,13 +251,13 @@ export function UsersTable({
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>
-                              Benutzer loeschen?
+                              Benutzer löschen?
                             </AlertDialogTitle>
                             <AlertDialogDescription>
                               Der Benutzer{" "}
                               <strong>{user.email}</strong> wird
-                              unwiderruflich geloescht. Dieser Vorgang kann nicht
-                              rueckgaengig gemacht werden.
+                              unwiderruflich gelöscht. Dieser Vorgang kann nicht
+                              rückgängig gemacht werden.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

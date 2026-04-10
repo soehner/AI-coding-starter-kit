@@ -4,7 +4,7 @@ import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { inviteUserSchema } from "@/lib/validations/admin"
 
 export async function POST(request: Request) {
-  // 1. Admin-Berechtigung pruefen (inkl. Rate-Limiting)
+  // 1. Admin-Berechtigung prüfen (inkl. Rate-Limiting)
   const authResult = await requireAdmin()
   if (authResult.error) {
     return authResult.error
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     body = await request.json()
   } catch {
     return NextResponse.json(
-      { error: "Ungueltiger Request-Body." },
+      { error: "Ungültiger Request-Body." },
       { status: 400 }
     )
   }
@@ -24,14 +24,14 @@ export async function POST(request: Request) {
   const validation = inviteUserSchema.safeParse(body)
   if (!validation.success) {
     const firstError =
-      validation.error.issues[0]?.message ?? "Ungueltige Eingabe."
+      validation.error.issues[0]?.message ?? "Ungültige Eingabe."
     return NextResponse.json({ error: firstError }, { status: 400 })
   }
 
   const { email, role } = validation.data
   const normalizedEmail = email.toLowerCase().trim()
 
-  // 3. Pruefen ob E-Mail bereits existiert
+  // 3. Prüfen ob E-Mail bereits existiert
   const adminClient = createAdminSupabaseClient()
 
   const { data: existingProfiles } = await adminClient
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Einladung konnte nicht gesendet werden. Bitte versuchen Sie es spaeter erneut.",
+          "Einladung konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.",
       },
       { status: 500 }
     )
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
     if (updateError) {
       console.error("Fehler beim Setzen der Rolle:", updateError.message)
-      // Einladung wurde trotzdem gesendet - Rolle kann spaeter geaendert werden
+      // Einladung wurde trotzdem gesendet - Rolle kann später geändert werden
     }
   }
 

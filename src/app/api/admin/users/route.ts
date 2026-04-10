@@ -30,7 +30,7 @@ export async function GET() {
     await adminClient.auth.admin.listUsers({ perPage: 100 })
 
   if (authError) {
-    // Fallback: Profile ohne last_sign_in_at zurueckgeben
+    // Fallback: Profile ohne last_sign_in_at zurückgeben
     return NextResponse.json(
       profiles.map((p) => ({ ...p, last_sign_in_at: null }))
     )
