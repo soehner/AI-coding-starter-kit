@@ -1,6 +1,6 @@
 # PROJ-7: Granulare Feature-Berechtigungen für Benutzer
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
 **Zuletzt aktualisiert:** 2026-04-10
 
