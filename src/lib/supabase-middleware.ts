@@ -33,20 +33,27 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const publicRoutes = ["/login", "/passwort-vergessen", "/api/auth/callback"]
+  // Routen ohne Login-Pflicht
+  const publicRoutes = ["/login", "/passwort-vergessen", "/api/auth/callback", "/antrag", "/abstimmung", "/api/cost-requests"]
   const isPublicRoute = publicRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   )
 
-  // Nicht eingeloggt und auf geschuetzter Route -> Redirect zu /login
+  // Auth-Routen: Eingeloggte Benutzer → Dashboard (Login/Passwort-vergessen nicht nötig)
+  const authOnlyRoutes = ["/login", "/passwort-vergessen", "/api/auth/callback"]
+  const isAuthOnlyRoute = authOnlyRoutes.some((route) =>
+    request.nextUrl.pathname.startsWith(route)
+  )
+
+  // Nicht eingeloggt und auf geschützter Route → Redirect zu /login
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
     return NextResponse.redirect(url)
   }
 
-  // Eingeloggt und auf öffentlicher Route -> Redirect zu /dashboard
-  if (user && isPublicRoute) {
+  // Eingeloggt und auf Auth-Route → Redirect zu /dashboard
+  if (user && isAuthOnlyRoute) {
     const url = request.nextUrl.clone()
     url.pathname = "/dashboard"
     return NextResponse.redirect(url)

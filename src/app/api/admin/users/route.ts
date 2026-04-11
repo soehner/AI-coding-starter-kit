@@ -11,10 +11,10 @@ export async function GET() {
 
   const adminClient = createAdminSupabaseClient()
 
-  // 1. Profile aus der Datenbank laden
+  // 1. Profile mit Berechtigungen aus der Datenbank laden (Join statt N+1)
   const { data: profiles, error: profilesError } = await adminClient
     .from("user_profiles")
-    .select("id, email, role, created_at")
+    .select("id, email, role, created_at, user_permissions(edit_transactions, export_excel, import_statements, updated_at)")
     .order("created_at", { ascending: true })
     .limit(100)
 
@@ -32,17 +32,25 @@ export async function GET() {
   if (authError) {
     // Fallback: Profile ohne last_sign_in_at zurückgeben
     return NextResponse.json(
-      profiles.map((p) => ({ ...p, last_sign_in_at: null }))
+      profiles.map((p) => ({
+        ...p,
+        permissions: p.user_permissions ?? null,
+        user_permissions: undefined,
+        last_sign_in_at: null,
+      }))
     )
   }
 
-  // 3. Auth-Daten mit Profilen zusammenfuehren
+  // 3. Auth-Daten mit Profilen zusammenführen
   const authMap = new Map(
     authData.users.map((u) => [u.id, u.last_sign_in_at])
   )
 
   const users = profiles.map((p) => ({
     ...p,
+    // user_permissions ist ein Objekt (1:1-Beziehung) oder null
+    permissions: p.user_permissions ?? null,
+    user_permissions: undefined,
     last_sign_in_at: authMap.get(p.id) ?? null,
   }))
 

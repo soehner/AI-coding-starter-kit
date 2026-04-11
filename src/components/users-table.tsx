@@ -31,8 +31,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
-import { AlertCircle, Loader2, Trash2 } from "lucide-react"
-import type { UserRole } from "@/lib/types"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { UserPermissionsPanel } from "@/components/user-permissions-panel"
+import { AlertCircle, ChevronDown, Loader2, Trash2 } from "lucide-react"
+import type { UserRole, UserPermissions, PermissionKey } from "@/lib/types"
 
 export interface UserEntry {
   id: string
@@ -40,6 +42,7 @@ export interface UserEntry {
   role: UserRole
   created_at: string
   last_sign_in_at?: string | null
+  permissions?: UserPermissions | null
 }
 
 interface UsersTableProps {
@@ -49,6 +52,7 @@ interface UsersTableProps {
   error: string | null
   onRoleChange: (userId: string, newRole: UserRole) => Promise<void>
   onDelete: (userId: string) => Promise<void>
+  onPermissionChange?: (userId: string, permission: PermissionKey, value: boolean) => Promise<void>
 }
 
 function getRoleLabel(role: string): string {
@@ -87,10 +91,12 @@ export function UsersTable({
   error,
   onRoleChange,
   onDelete,
+  onPermissionChange,
 }: UsersTableProps) {
   const [updatingRole, setUpdatingRole] = useState<string | null>(null)
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
 
   async function handleRoleChange(userId: string, newRole: UserRole) {
     setUpdatingRole(userId)
@@ -152,6 +158,18 @@ export function UsersTable({
 
   const isSelf = (userId: string) => userId === currentUserId
 
+  function toggleExpanded(userId: string) {
+    setExpandedUsers((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) {
+        next.delete(userId)
+      } else {
+        next.add(userId)
+      }
+      return next
+    })
+  }
+
   return (
     <div className="space-y-4">
       {actionError && (
@@ -180,100 +198,153 @@ export function UsersTable({
               const isCurrentUser = isSelf(user.id)
               const isUpdating = updatingRole === user.id
               const isDeleting = deletingUser === user.id
+              const isViewer = user.role === "viewer"
+              const canExpand = isViewer && !isCurrentUser && !!onPermissionChange
+              const isExpanded = expandedUsers.has(user.id)
 
               return (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      {user.email}
-                      {isCurrentUser && (
-                        <Badge variant="outline" className="text-xs">
-                          Du
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {isCurrentUser ? (
-                      <span className="text-sm text-muted-foreground">
-                        {getRoleLabel(user.role)}
-                      </span>
-                    ) : (
-                      <Select
-                        value={user.role}
-                        onValueChange={(value: UserRole) =>
-                          handleRoleChange(user.id, value)
-                        }
-                        disabled={isUpdating || isDeleting}
-                      >
-                        <SelectTrigger
-                          className="w-[150px]"
-                          aria-label={`Rolle von ${user.email} ändern`}
-                        >
-                          {isUpdating ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <SelectValue />
+                <Collapsible
+                  key={user.id}
+                  open={isExpanded && canExpand}
+                  onOpenChange={() => canExpand && toggleExpanded(user.id)}
+                  asChild
+                >
+                  <>
+                    <TableRow
+                      className={canExpand ? "cursor-pointer" : undefined}
+                      onClick={canExpand ? () => toggleExpanded(user.id) : undefined}
+                    >
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {canExpand && (
+                            <CollapsibleTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 shrink-0"
+                                aria-label={`Berechtigungen von ${user.email} ${isExpanded ? "zuklappen" : "aufklappen"}`}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleExpanded(user.id)
+                                }}
+                              >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform duration-200 ${
+                                    isExpanded ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </Button>
+                            </CollapsibleTrigger>
                           )}
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Administrator</SelectItem>
-                          <SelectItem value="viewer">Betrachter</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    <Badge variant={status.variant}>{status.label}</Badge>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    {formatDate(user.created_at)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {isCurrentUser ? (
-                      <span className="text-xs text-muted-foreground">--</span>
-                    ) : (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            disabled={isDeleting}
-                            aria-label={`${user.email} löschen`}
+                          {user.email}
+                          {isCurrentUser && (
+                            <Badge variant="outline" className="text-xs">
+                              Du
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {isCurrentUser ? (
+                          <span className="text-sm text-muted-foreground">
+                            {getRoleLabel(user.role)}
+                          </span>
+                        ) : (
+                          <Select
+                            value={user.role}
+                            onValueChange={(value: UserRole) =>
+                              handleRoleChange(user.id, value)
+                            }
+                            disabled={isUpdating || isDeleting}
                           >
-                            {isDeleting ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            )}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Benutzer löschen?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Der Benutzer{" "}
-                              <strong>{user.email}</strong> wird
-                              unwiderruflich gelöscht. Dieser Vorgang kann nicht
-                              rückgängig gemacht werden.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(user.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            <SelectTrigger
+                              className="w-[150px]"
+                              aria-label={`Rolle von ${user.email} ändern`}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              Loeschen
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                              {isUpdating ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <SelectValue />
+                              )}
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Administrator</SelectItem>
+                              <SelectItem value="viewer">Betrachter</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Badge variant={status.variant}>{status.label}</Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {formatDate(user.created_at)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {isCurrentUser ? (
+                          <span className="text-xs text-muted-foreground">--</span>
+                        ) : (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                disabled={isDeleting}
+                                aria-label={`${user.email} löschen`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {isDeleting ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Benutzer löschen?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Der Benutzer{" "}
+                                  <strong>{user.email}</strong> wird
+                                  unwiderruflich gelöscht. Dieser Vorgang kann nicht
+                                  rückgängig gemacht werden.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDelete(user.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Löschen
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </TableCell>
+                    </TableRow>
+
+                    {/* Aufklapp-Bereich: Feature-Berechtigungen */}
+                    {canExpand && (
+                      <CollapsibleContent asChild>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableCell colSpan={5} className="p-0">
+                            <UserPermissionsPanel
+                              userId={user.id}
+                              userEmail={user.email}
+                              permissions={user.permissions ?? null}
+                              onPermissionChange={onPermissionChange}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      </CollapsibleContent>
                     )}
-                  </TableCell>
-                </TableRow>
+                  </>
+                </Collapsible>
               )
             })}
           </TableBody>

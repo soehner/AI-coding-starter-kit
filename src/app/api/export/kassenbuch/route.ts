@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requirePermission } from "@/lib/require-permission"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { z } from "zod"
 import ExcelJS from "exceljs"
@@ -60,8 +60,8 @@ function getDateRange(
 
 export async function GET(request: Request) {
   try {
-    // Authentifizierung: Nur Admins dürfen exportieren
-    const authResult = await requireAdmin()
+    // Authentifizierung: Admins oder Betrachter mit export_excel-Berechtigung
+    const authResult = await requirePermission("export_excel")
     if (authResult.error) return authResult.error
 
     // Query-Parameter validieren

@@ -33,7 +33,7 @@ function getRoleLabel(role: string): string {
 }
 
 export function AppHeader() {
-  const { user, profile, isLoading, signOut, updatePassword, isAdmin } = useAuth()
+  const { user, profile, isLoading, signOut, updatePassword, isAdmin, hasPermission } = useAuth()
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -86,14 +86,16 @@ export function AppHeader() {
                     <User className="mr-2 h-4 w-4" />
                     {getRoleLabel(profile.role)}
                   </DropdownMenuItem>
+                  {hasPermission("import_statements") && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard/admin/import">
+                        <FileUp className="mr-2 h-4 w-4" />
+                        Kontoauszug importieren
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {isAdmin && (
                     <>
-                      <DropdownMenuItem asChild>
-                        <Link href="/dashboard/admin/import">
-                          <FileUp className="mr-2 h-4 w-4" />
-                          Kontoauszug importieren
-                        </Link>
-                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/dashboard/admin/users">
                           <Users className="mr-2 h-4 w-4" />

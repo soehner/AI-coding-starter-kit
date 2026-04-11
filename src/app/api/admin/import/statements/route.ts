@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requirePermission } from "@/lib/require-permission"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 
 /**
@@ -7,7 +7,8 @@ import { createAdminSupabaseClient } from "@/lib/supabase-admin"
  * Gibt eine Liste aller importierten Kontoauszüge zurück.
  */
 export async function GET() {
-  const authResult = await requireAdmin()
+  // Auth + Berechtigung (import_statements) prüfen
+  const authResult = await requirePermission("import_statements")
   if (authResult.error) {
     return authResult.error
   }

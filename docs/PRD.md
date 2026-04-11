@@ -31,6 +31,7 @@
 | P1 | PROJ-8: Zwei-Faktor-Authentifizierung (2FA) | Planned |
 | P1 | PROJ-9: Seafile-Integration für Belege & Kontoauszüge | Planned |
 | P1 | PROJ-10: Genehmigungssystem für Vereinsanträge | Planned |
+| P1 | PROJ-11: Kostenübernahme-Antrag (iFrame-Formular) | Planned |
 
 ## Success Metrics
 - Zeiteinsparung: Manuelles Übertragen entfällt (aktuell ~30 Min pro Kontoauszug)

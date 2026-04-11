@@ -16,7 +16,7 @@ import type {
 } from "@/lib/types"
 
 export default function AdminImportPage() {
-  const { user, profile, isLoading: authLoading, isAdmin } = useAuth()
+  const { user, profile, isLoading: authLoading, isAdmin, hasPermission } = useAuth()
   const router = useRouter()
 
   const [hasApiToken, setHasApiToken] = useState(false)
@@ -69,20 +69,22 @@ export default function AdminImportPage() {
     }
   }, [])
 
-  // Redirect falls kein Admin
+  const canImport = hasPermission("import_statements")
+
+  // Redirect falls keine Import-Berechtigung
   useEffect(() => {
-    if (!authLoading && (!profile || !isAdmin)) {
+    if (!authLoading && (!profile || !canImport)) {
       router.replace("/dashboard")
     }
-  }, [authLoading, profile, isAdmin, router])
+  }, [authLoading, profile, canImport, router])
 
-  // Daten laden wenn Admin
+  // Daten laden wenn berechtigt
   useEffect(() => {
-    if (isAdmin) {
+    if (canImport) {
       checkSettings()
       fetchStatements()
     }
-  }, [isAdmin, checkSettings, fetchStatements])
+  }, [canImport, checkSettings, fetchStatements])
 
   // Lade-Zustand
   if (authLoading || isLoadingSettings) {
@@ -95,8 +97,8 @@ export default function AdminImportPage() {
     )
   }
 
-  // Nicht-Admin: nichts anzeigen
-  if (!isAdmin || !user) {
+  // Nicht berechtigt: nichts anzeigen (Redirect passiert im useEffect)
+  if (!canImport || !user) {
     return null
   }
 

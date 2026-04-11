@@ -19,3 +19,15 @@ export const updateRoleSchema = z.object({
 })
 
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>
+
+// PROJ-7: Granulare Feature-Berechtigungen
+export const updatePermissionsSchema = z.object({
+  permission: z.enum(["edit_transactions", "export_excel", "import_statements"], {
+    message: "Ungültige Berechtigung.",
+  }),
+  value: z.boolean({
+    message: "Wert muss true oder false sein.",
+  }),
+})
+
+export type UpdatePermissionsInput = z.infer<typeof updatePermissionsSchema>

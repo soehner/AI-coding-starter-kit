@@ -19,7 +19,7 @@ import type {
 } from "@/lib/types"
 
 export default function DashboardPage() {
-  const { profile, isLoading: authLoading, error: authError, isAdmin } = useAuth()
+  const { profile, isLoading: authLoading, error: authError, isAdmin, hasPermission } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -298,7 +298,7 @@ export default function DashboardPage() {
             onSearchChange={handleSearchChange}
           />
         </div>
-        {isAdmin && (
+        {hasPermission("export_excel") && (
           <KassenbuchExportButton
             year={year}
             month={month}
@@ -316,7 +316,7 @@ export default function DashboardPage() {
         totalPages={totalPages}
         sortBy={sortBy}
         sortDir={sortDir}
-        canEdit={isAdmin}
+        canEdit={hasPermission("edit_transactions")}
         onSort={handleSort}
         onPageChange={handlePageChange}
         onUpdateTransaction={handleUpdateTransaction}

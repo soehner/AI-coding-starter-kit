@@ -69,6 +69,64 @@ export interface Transaction {
   }
 }
 
+// PROJ-7: Granulare Feature-Berechtigungen
+export interface UserPermissions {
+  user_id: string
+  edit_transactions: boolean
+  export_excel: boolean
+  import_statements: boolean
+  updated_at: string
+}
+
+export type PermissionKey = "edit_transactions" | "export_excel" | "import_statements"
+
+export interface UserProfileWithPermissions extends UserProfile {
+  permissions: {
+    edit_transactions: boolean
+    export_excel: boolean
+    import_statements: boolean
+  }
+}
+
+export interface UserWithPermissions extends UserProfile {
+  last_sign_in_at: string | null
+  permissions: UserPermissions | null
+}
+
+// PROJ-11: Kostenübernahme-Antrag
+export type CostRequestStatus = "offen" | "genehmigt" | "abgelehnt"
+export type ApprovalRole = "vorsitzender_1" | "vorsitzender_2" | "kassier"
+
+export interface CostRequest {
+  id: string
+  applicant_first_name: string
+  applicant_last_name: string
+  applicant_email: string
+  amount_cents: number
+  purpose: string
+  status: CostRequestStatus
+  email_status: "ausstehend" | "gesendet" | "fehlgeschlagen"
+  decided_at: string | null
+  created_at: string
+}
+
+export interface CostRequestVote {
+  approval_role: ApprovalRole
+  decision: "genehmigt" | "abgelehnt"
+  voted_at: string
+}
+
+export interface CostRequestWithVotes extends CostRequest {
+  cost_request_votes: CostRequestVote[]
+}
+
+export interface CostRequestApprover {
+  id: string
+  approval_role: ApprovalRole
+  user_id: string
+  label: string
+}
+
 // PROJ-5: Bearbeitbare Felder
 export type EditableTransactionField = "description" | "note" | "document_ref" | "statement_ref"
 

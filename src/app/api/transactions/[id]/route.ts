@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requirePermission } from "@/lib/require-permission"
 import { z } from "zod"
 
 const transactionUpdateSchema = z.object({
@@ -33,8 +33,8 @@ export async function PATCH(
   try {
     const { id } = await params
 
-    // Auth + Admin + Rate Limiting prüfen
-    const auth = await requireAdmin()
+    // Auth + Berechtigung (edit_transactions) + Rate Limiting prüfen
+    const auth = await requirePermission("edit_transactions")
     if (auth.error) return auth.error
 
     const supabase = await createServerSupabaseClient()

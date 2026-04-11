@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requirePermission } from "@/lib/require-permission"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { decrypt } from "@/lib/encryption"
 import { parseBankStatement } from "@/lib/ki-parser"
@@ -13,7 +13,8 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB serverseitiges Limit
  * parst es mit der konfigurierten KI-API und gibt die erkannten Buchungen zurück.
  */
 export async function POST(request: Request) {
-  const authResult = await requireAdmin()
+  // Auth + Berechtigung (import_statements) prüfen
+  const authResult = await requirePermission("import_statements")
   if (authResult.error) {
     return authResult.error
   }

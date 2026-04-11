@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireAdmin } from "@/lib/admin-auth"
+import { requirePermission } from "@/lib/require-permission"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { confirmImportSchema } from "@/lib/validations/import"
 
@@ -8,7 +8,8 @@ import { confirmImportSchema } from "@/lib/validations/import"
  * Speichert die geprüften Buchungen in der Datenbank.
  */
 export async function POST(request: Request) {
-  const authResult = await requireAdmin()
+  // Auth + Berechtigung (import_statements) prüfen
+  const authResult = await requirePermission("import_statements")
   if (authResult.error) {
     return authResult.error
   }

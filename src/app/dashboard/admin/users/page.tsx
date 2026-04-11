@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/use-auth"
 import { InviteUserDialog } from "@/components/invite-user-dialog"
 import { UsersTable, type UserEntry } from "@/components/users-table"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { UserRole } from "@/lib/types"
+import type { UserRole, PermissionKey, UserPermissions } from "@/lib/types"
 
 export default function AdminUsersPage() {
   const { user, profile, isLoading: authLoading, isAdmin } = useAuth()
@@ -35,12 +35,14 @@ export default function AdminUsersPage() {
         role: string
         created_at: string
         last_sign_in_at: string | null
+        permissions?: UserPermissions | null
       }>).map((u) => ({
         id: u.id,
         email: u.email,
         role: u.role as UserRole,
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
+        permissions: u.permissions ?? null,
       }))
 
       setUsers(userEntries)
@@ -65,7 +67,7 @@ export default function AdminUsersPage() {
     }
   }, [isAdmin, fetchUsers])
 
-  // Lade-Zustand waehrend Auth noch laeuft
+  // Lade-Zustand während Auth noch läuft
   if (authLoading) {
     return (
       <div className="container px-4 py-8 md:px-6">
@@ -96,6 +98,46 @@ export default function AdminUsersPage() {
     // Lokale Liste aktualisieren
     setUsers((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+    )
+  }
+
+  async function handlePermissionChange(
+    userId: string,
+    permission: PermissionKey,
+    value: boolean
+  ) {
+    const response = await fetch(`/api/admin/users/${userId}/permissions`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ permission, value }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || "Berechtigung konnte nicht geändert werden.")
+    }
+
+    // Lokale Liste aktualisieren
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              permissions: {
+                ...(u.permissions || {
+                  user_id: userId,
+                  edit_transactions: false,
+                  export_excel: false,
+                  import_statements: false,
+                  updated_at: new Date().toISOString(),
+                }),
+                [permission]: value,
+                updated_at: new Date().toISOString(),
+              },
+            }
+          : u
+      )
     )
   }
 
@@ -135,6 +177,7 @@ export default function AdminUsersPage() {
         error={error}
         onRoleChange={handleRoleChange}
         onDelete={handleDelete}
+        onPermissionChange={handlePermissionChange}
       />
     </div>
   )

@@ -46,7 +46,7 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select("id, email, role, created_at")
+    .select("id, email, role, created_at, user_permissions(edit_transactions, export_excel, import_statements)")
     .eq("id", user.id)
     .single()
 
@@ -57,5 +57,23 @@ export async function GET() {
     )
   }
 
-  return NextResponse.json(profile)
+  // Berechtigungen flach mappen: Admins haben implizit alles
+  const isAdmin = profile.role === "admin"
+  // Supabase gibt bei 1:n-Joins ein Array zurück, bei 1:1 mit .single() ein Objekt oder Array
+  const rawPermissions = profile.user_permissions
+  const permissions = Array.isArray(rawPermissions) ? rawPermissions[0] : rawPermissions
+  const perms = permissions as { edit_transactions?: boolean; export_excel?: boolean; import_statements?: boolean } | null
+  const response = {
+    id: profile.id,
+    email: profile.email,
+    role: profile.role,
+    created_at: profile.created_at,
+    permissions: {
+      edit_transactions: isAdmin || perms?.edit_transactions === true,
+      export_excel: isAdmin || perms?.export_excel === true,
+      import_statements: isAdmin || perms?.import_statements === true,
+    },
+  }
+
+  return NextResponse.json(response)
 }
