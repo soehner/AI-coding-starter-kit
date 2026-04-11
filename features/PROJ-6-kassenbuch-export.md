@@ -1,6 +1,6 @@
 # PROJ-6: Kassenbuch-Export (Excel)
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
 **Zuletzt aktualisiert:** 2026-04-11
 
