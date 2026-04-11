@@ -1,6 +1,6 @@
 # PROJ-3: PDF-Kontoauszug-Upload & Parsing
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
 **Zuletzt aktualisiert:** 2026-04-10
 
@@ -442,4 +442,8 @@ Admin wählt PDF → PDF wird zu Supabase Storage hochgeladen (Archiv)
 - **Empfehlung:** BUG-10 (Umlaut) vor Deployment beheben. BUG-5, BUG-8, BUG-9 im naechsten Sprint beheben.
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+- **Produktions-URL:** https://cbs-finanz.vercel.app
+- **Deployt am:** 2026-04-11
+- **Commit:** 854c4ac (fix(PROJ-3): Umlaut-Ersetzung in Button-Text korrigiert)
+- **Datenbank-Migrationen:** Bereits in vorherigen Deploys angewandt
