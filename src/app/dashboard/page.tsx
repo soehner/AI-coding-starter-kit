@@ -7,6 +7,7 @@ import { useDebounce } from "@/hooks/use-debounce"
 import { KpiCards } from "@/components/kpi-cards"
 import { TransactionFilterBar } from "@/components/transaction-filter-bar"
 import { TransactionTable } from "@/components/transaction-table"
+import { KassenbuchExportButton } from "@/components/kassenbuch-export-button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
@@ -284,16 +285,27 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Filter-Leiste */}
-      <TransactionFilterBar
-        availableYears={summary?.availableYears ?? []}
-        selectedYear={year}
-        selectedMonth={month}
-        searchValue={search}
-        onYearChange={handleYearChange}
-        onMonthChange={handleMonthChange}
-        onSearchChange={handleSearchChange}
-      />
+      {/* Filter-Leiste + Export */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex-1">
+          <TransactionFilterBar
+            availableYears={summary?.availableYears ?? []}
+            selectedYear={year}
+            selectedMonth={month}
+            searchValue={search}
+            onYearChange={handleYearChange}
+            onMonthChange={handleMonthChange}
+            onSearchChange={handleSearchChange}
+          />
+        </div>
+        {isAdmin && (
+          <KassenbuchExportButton
+            year={year}
+            month={month}
+            search={debouncedSearch}
+          />
+        )}
+      </div>
 
       {/* Buchungs-Tabelle */}
       <TransactionTable

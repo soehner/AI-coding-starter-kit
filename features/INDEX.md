@@ -17,7 +17,7 @@
 | PROJ-3 | PDF-Kontoauszug-Upload & Parsing | Deployed | [PROJ-3-kontoauszug-import.md](PROJ-3-kontoauszug-import.md) | 2026-04-10 |
 | PROJ-4 | Bankbewegungen-Übersicht (Dashboard) | Deployed | [PROJ-4-bankbewegungen-dashboard.md](PROJ-4-bankbewegungen-dashboard.md) | 2026-04-10 |
 | PROJ-5 | Eintragsbearbeitung & Bemerkungen | Deployed | [PROJ-5-eintragsbearbeitung.md](PROJ-5-eintragsbearbeitung.md) | 2026-04-10 |
-| PROJ-6 | Kassenbuch-Export (Excel) | Planned | [PROJ-6-kassenbuch-export.md](PROJ-6-kassenbuch-export.md) | 2026-04-10 |
+| PROJ-6 | Kassenbuch-Export (Excel) | In Review | [PROJ-6-kassenbuch-export.md](PROJ-6-kassenbuch-export.md) | 2026-04-10 |
 | PROJ-7 | Granulare Feature-Berechtigungen | Planned | [PROJ-7-feature-berechtigungen.md](PROJ-7-feature-berechtigungen.md) | 2026-04-10 |
 | PROJ-8 | Zwei-Faktor-Authentifizierung (2FA) | Planned | [PROJ-8-zwei-faktor-authentifizierung.md](PROJ-8-zwei-faktor-authentifizierung.md) | 2026-04-10 |
 
