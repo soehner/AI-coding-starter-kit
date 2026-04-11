@@ -2,63 +2,69 @@
 
 ## Status: Geplant
 **Erstellt:** 2026-04-10
-**Zuletzt aktualisiert:** 2026-04-10
+**Zuletzt aktualisiert:** 2026-04-11
 
 ## Abhängigkeiten
 - Benötigt: PROJ-1 (Authentifizierung) – nur Admins und Benutzer mit Export-Berechtigung
-- Benötigt: PROJ-4 (Dashboard) – Daten müssen vorhanden sein
-- Benötigt: PROJ-5 (Eintragsbearbeitung) – Bemerkungen sind im Export enthalten
+- Benötigt: PROJ-4 (Dashboard) – Export übernimmt die aktuell gesetzten Filter
+- Benötigt: PROJ-5 (Eintragsbearbeitung) – Bemerkungen und Referenzen sind im Export enthalten
 
 ## User Stories
-- Als Administrator möchte ich ein Kassenbuch für ein bestimmtes Jahr als Excel-Datei exportieren, damit ich die offizielle Kassenbuchführung wie bisher weiterführen kann.
+- Als Administrator möchte ich die aktuell gefilterten Buchungen als Excel-Kassenbuch exportieren, damit ich die offizielle Kassenbuchführung weiterführen kann.
 - Als Administrator möchte ich, dass die exportierte Excel-Datei exakt dem Muster der bestehenden Kassenbücher entspricht (gleiche Spalten, gleiche Formeln, gleiche Struktur).
-- Als Administrator möchte ich vor dem Export ein Jahr auswählen können (z. B. 2025 oder 2026).
 - Als Benutzer mit Export-Berechtigung möchte ich ebenfalls einen Excel-Export erstellen dürfen, auch wenn ich kein Admin bin.
 - Als Benutzer möchte ich den Export-Button leicht auffindbar im Dashboard haben.
+- Als Benutzer möchte ich am Anfang der Exportdatei eine Saldenmitteilung mit Eröffnungs- und Schlusssaldo sehen, damit ich die Jahresergebnisse auf einen Blick erkenne.
 
 ## Akzeptanzkriterien
 - [ ] Export-Button im Dashboard (nur sichtbar für Admins und Benutzer mit Export-Berechtigung)
-- [ ] Jahr-Auswahl vor dem Export (Dropdown mit verfügbaren Jahren)
-- [ ] Exportierte Excel-Datei entspricht dem Kassenbuch-Muster:
-  - Einnahmen-Sektion: Datum, Kunde/Buchungstext, Bemerkung, brutto, MwSt-Satz, MwSt, netto
-  - Ausgaben-Sektion: brutto, MwSt-Satz, MwSt, netto
-  - Saldo-Sektion: Saldo, Belege-Ref, Kontoauszug-Ref
-- [ ] Formeln sind in der Exportdatei enthalten (Saldo-Kumulierung, MwSt-Berechnung)
-- [ ] Dateiname: `Kassenbuch_JJJJ.xlsx`
-- [ ] Saldenmitteilung (Kontostand-Übersicht) wird als separate Zeilen am Anfang eingefügt
-- [ ] Export läuft server-seitig, Download startet automatisch im Browser
-- [ ] Ladeindikator während des Exports (kann bei vielen Buchungen etwas dauern)
+- [ ] Der Export übernimmt die aktuell gesetzten Dashboard-Filter (Datumsbereich, Suche etc.)
+- [ ] Ladeindikator (Spinner/Toast) während der Export-Generierung
+- [ ] Saldenmitteilung am Anfang der Excel-Datei:
+  - Eröffnungssaldo (Kontostand am ersten Tag des Filterzeitraums)
+  - Schlusssaldo (Kontostand am letzten Tag des Filterzeitraums)
+  - Summe Einnahmen im Zeitraum
+  - Summe Ausgaben im Zeitraum
+- [ ] Buchungsliste entspricht dem Kassenbuch-Muster (Spalten A–N, siehe unten)
+- [ ] MwSt-Spalten (E, F, I, J) werden für Kompatibilität mit dem bestehenden Format mitgeführt, aber leer gelassen (der Förderverein hat keine MwSt-Buchungen)
+- [ ] Saldo-Spalte (L) enthält kumulativ berechnete Formeln
+- [ ] Dateiname: `Kassenbuch_JJJJ-MM-TT_JJJJ-MM-TT.xlsx` (von–bis Datum des Filterzeitraums)
+- [ ] Download startet automatisch im Browser
+- [ ] Bei leerem Filterergebnis: leere Vorlage mit Saldenmitteilung (0-Werte), kein Fehler
+- [ ] Exportfehler zeigt Fehlermeldung mit Hinweis, erneut zu versuchen
 
 ## Spaltenstruktur (aus bestehendem Kassenbuch übernommen)
-| Spalte | Inhalt |
-|--------|--------|
-| A | Datum |
-| B | Buchungstext / Kunde |
-| C | Bemerkung |
-| D | Einnahme brutto |
-| E | Einnahme MwSt-Satz |
-| F | Einnahme MwSt |
-| G | Einnahme netto |
-| H | Ausgabe brutto |
-| I | Ausgabe MwSt-Satz |
-| J | Ausgabe MwSt |
-| K | Ausgabe netto |
-| L | Saldo (kumulativ) |
-| M | Belege-Referenz |
-| N | Kontoauszug-Referenz |
+| Spalte | Inhalt | Quelle |
+|--------|--------|--------|
+| A | Datum | `booking_date` |
+| B | Buchungstext / Kunde | `description` |
+| C | Bemerkung | `note` |
+| D | Einnahme brutto | `amount` wenn positiv |
+| E | Einnahme MwSt-Satz | leer (kein MwSt) |
+| F | Einnahme MwSt | leer (kein MwSt) |
+| G | Einnahme netto | leer (kein MwSt) |
+| H | Ausgabe brutto | `amount` wenn negativ (Absolutwert) |
+| I | Ausgabe MwSt-Satz | leer (kein MwSt) |
+| J | Ausgabe MwSt | leer (kein MwSt) |
+| K | Ausgabe netto | leer (kein MwSt) |
+| L | Saldo (kumulativ) | Formel: Vorheiler Saldo + D - H |
+| M | Belege-Referenz | `document_ref` |
+| N | Kontoauszug-Referenz | `statement_ref` |
 
 ## Randfälle
-- Was passiert, wenn keine Buchungen im gewählten Jahr vorhanden sind? → Leere Kassenbuch-Vorlage mit Hinweis
-- Was passiert bei einem sehr großen Jahr (>500 Buchungen)? → Export dauert länger, Ladeindikator zeigen
-- Was passiert, wenn MwSt-Satz nicht bekannt ist? → Felder leer lassen (0%)
-- Was passiert bei Exportfehler? → Fehlermeldung mit Hinweis, erneut zu versuchen
+- Was passiert, wenn keine Buchungen im Filterzeitraum vorhanden sind? → Leere Kassenbuch-Vorlage mit Saldenmitteilung (0-Werte), kein Fehler
+- Was passiert bei sehr vielen Buchungen (>500)? → Export dauert länger, Ladeindikator bleibt bis Download fertig
+- Was passiert bei Exportfehler (Datenbankfehler, Timeout)? → Fehlermeldung mit Hinweis, erneut zu versuchen
+- Was passiert, wenn kein Filterzeitraum gesetzt ist? → Export aller Buchungen, Dateiname ohne Datumsangabe: `Kassenbuch_alle.xlsx`
+- Was passiert, wenn der Benutzer keine Export-Berechtigung hat? → Button nicht angezeigt; API gibt 403 zurück
 
 ## Technische Anforderungen
-- Library: `exceljs` (server-seitig) oder `xlsx` (SheetJS)
-- API-Route `GET /api/export/kassenbuch?year=JJJJ` (streaming download)
-- Server Action oder API Route, kein client-seitiges Datei-Erstellen
-- Berechtigung geprüft via Rolle oder `user_permissions.export_excel`
-- Zod-Validierung: Jahr muss 4-stellige Zahl ≥ 2020 sein
+- Library: `exceljs` (server-seitig, unterstützt Formeln und Styling)
+- API-Route `GET /api/export/kassenbuch` mit Query-Params für aktive Filter (Datum-von, Datum-bis, Suchbegriff)
+- Server-seitige Generierung, Response als `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+- Berechtigung geprüft via Rolle (`admin`) oder `user_permissions` (PROJ-7)
+- Zod-Validierung der Query-Parameter (Datum-Format, Zeichenlängenbegrenzung)
+- Filter-Übergabe: Dashboard sendet aktuelle Filter-Parameter an Export-Endpunkt
 
 ---
 <!-- Abschnitte unten werden von nachfolgenden Skills hinzugefügt -->
