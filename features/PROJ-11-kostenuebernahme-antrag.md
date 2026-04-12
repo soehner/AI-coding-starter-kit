@@ -1,8 +1,9 @@
 # PROJ-11: Kostenübernahme-Antrag (iFrame-Formular)
 
-## Status: In Review (QA bestanden – bereit für Deployment)
+## Status: Deployed
 **Erstellt:** 2026-04-11
 **Zuletzt aktualisiert:** 2026-04-12
+**Deployed:** 2026-04-12
 
 ## Abhängigkeiten
 - Benötigt: PROJ-1 (Authentifizierung) – Kassier-Account muss existieren
@@ -407,4 +408,18 @@ Geschützter Bereich
 - **Empfehlung:** Deployment moeglich. BUG-3 (persistentes Rate-Limiting) im naechsten Sprint adressieren, da In-Memory-Rate-Limiting auf Vercel-Serverless nicht zuverlaessig greift. BUG-1, BUG-5, BUG-7 als Backlog-Items einplanen.
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+**Deployt am:** 2026-04-12
+**Produktions-URL:** https://cbs-finanz.vercel.app
+**Commit:** `0399ccd` — fix(PROJ-11): Sicherheits- und Bugfixes aus QA-Re-Test
+**Vercel-Deployment:** cbs-finanz-8juqfldru-soehners-projects.vercel.app (READY)
+
+### Deployte Änderungen
+- Alle 7 aus dem QA-Re-Test identifizierten Bugs behoben (BUG-1 bis BUG-7)
+- Neue DB-Migration `009_rate_limits.sql` (Tabelle `rate_limits`, Funktionen `check_rate_limit`, `cleanup_rate_limits`) zuvor via Supabase Management API angewendet und verifiziert
+- Keine neuen Umgebungsvariablen erforderlich (Rate-Limiting nutzt bestehenden Supabase-Service-Role-Key)
+
+### Nach-Deployment-Verifizierung
+- Vercel-Build erfolgreich (Status: READY)
+- Keine Fehler in der Deployment-Pipeline
+- Migration auf der Produktions-DB verifiziert (`check_rate_limit` liefert korrekte Zählerwerte)
