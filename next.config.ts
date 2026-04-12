@@ -6,6 +6,9 @@ const iframeAllowedOrigins =
 const frameAncestors = `'self' ${iframeAllowedOrigins.split(",").map((o) => o.trim()).join(" ")}`;
 
 const nextConfig: NextConfig = {
+  // pdfjs-dist nicht bündeln — Next.js lädt es direkt aus node_modules,
+  // damit pdf.worker.mjs unter dem erwarteten Pfad gefunden wird.
+  serverExternalPackages: ["pdfjs-dist"],
   async headers() {
     const defaultSecurityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
