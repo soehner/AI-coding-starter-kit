@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import {
   Table,
   TableBody,
@@ -32,7 +32,6 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { UserPermissionsPanel } from "@/components/user-permissions-panel"
 import { AlertCircle, ChevronDown, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
 import type { UserRole, UserPermissions, PermissionKey } from "@/lib/types"
@@ -235,13 +234,7 @@ export function UsersTable({
               const isExpanded = expandedUsers.has(user.id)
 
               return (
-                <Collapsible
-                  key={user.id}
-                  open={isExpanded && canExpand}
-                  onOpenChange={() => canExpand && toggleExpanded(user.id)}
-                  asChild
-                >
-                  <>
+                <Fragment key={user.id}>
                     <TableRow
                       className={canExpand ? "cursor-pointer" : undefined}
                       onClick={canExpand ? () => toggleExpanded(user.id) : undefined}
@@ -249,24 +242,23 @@ export function UsersTable({
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {canExpand && (
-                            <CollapsibleTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 shrink-0"
-                                aria-label={`Berechtigungen von ${user.email} ${isExpanded ? "zuklappen" : "aufklappen"}`}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleExpanded(user.id)
-                                }}
-                              >
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform duration-200 ${
-                                    isExpanded ? "rotate-180" : ""
-                                  }`}
-                                />
-                              </Button>
-                            </CollapsibleTrigger>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0"
+                              aria-label={`Berechtigungen von ${user.email} ${isExpanded ? "zuklappen" : "aufklappen"}`}
+                              aria-expanded={isExpanded}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleExpanded(user.id)
+                              }}
+                            >
+                              <ChevronDown
+                                className={`h-4 w-4 transition-transform duration-200 ${
+                                  isExpanded ? "rotate-180" : ""
+                                }`}
+                              />
+                            </Button>
                           )}
                           {user.email}
                           {isCurrentUser && (
@@ -425,22 +417,19 @@ export function UsersTable({
                     </TableRow>
 
                     {/* Aufklapp-Bereich: Feature-Berechtigungen */}
-                    {canExpand && (
-                      <CollapsibleContent asChild>
-                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableCell colSpan={7} className="p-0">
-                            <UserPermissionsPanel
-                              userId={user.id}
-                              userEmail={user.email}
-                              permissions={user.permissions ?? null}
-                              onPermissionChange={onPermissionChange}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      </CollapsibleContent>
+                    {canExpand && isExpanded && (
+                      <TableRow className="bg-muted/50 hover:bg-muted/50">
+                        <TableCell colSpan={7} className="p-0">
+                          <UserPermissionsPanel
+                            userId={user.id}
+                            userEmail={user.email}
+                            permissions={user.permissions ?? null}
+                            onPermissionChange={onPermissionChange}
+                          />
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </>
-                </Collapsible>
+                </Fragment>
               )
             })}
           </TableBody>
