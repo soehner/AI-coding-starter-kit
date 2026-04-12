@@ -33,13 +33,6 @@ import {
 
 type UploadStep = "idle" | "uploading" | "done" | "error"
 
-const ALLOWED_TYPES = [
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-]
-
-const ALLOWED_EXTENSIONS = ".pdf,.jpg,.jpeg,.png"
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 
 interface BelegUploadDialogProps {
@@ -83,9 +76,6 @@ export function BelegUploadDialog({
   }, [resetState, onOpenChange])
 
   const validateFile = useCallback((file: File): string | null => {
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return "Nur PDF-, JPG- und PNG-Dateien sind erlaubt."
-    }
     if (file.size > MAX_FILE_SIZE) {
       return "Datei zu groß. Maximal 10 MB erlaubt."
     }
@@ -244,7 +234,6 @@ export function BelegUploadDialog({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept={ALLOWED_EXTENSIONS}
                 className="hidden"
                 onChange={handleInputChange}
                 disabled={isProcessing}
@@ -267,7 +256,7 @@ export function BelegUploadDialog({
               <p className="text-xs text-muted-foreground">
                 {selectedFile
                   ? `${(selectedFile.size / 1024).toFixed(0)} KB`
-                  : "PDF, JPG oder PNG (max. 10 MB)"}
+                  : "Beliebiges Dateiformat (max. 10 MB)"}
               </p>
             </div>
 

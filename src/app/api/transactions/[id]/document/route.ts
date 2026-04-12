@@ -10,7 +10,6 @@ import {
 } from "@/lib/seafile"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
-const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png"]
 
 /**
  * POST /api/transactions/[id]/document
@@ -56,14 +55,8 @@ export async function POST(
       )
     }
 
-    // 3. Datei validieren
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json(
-        { error: "Nur PDF-, JPG- und PNG-Dateien sind erlaubt." },
-        { status: 400 }
-      )
-    }
-
+    // 3. Datei-Größe validieren — Dateityp ist bewusst frei,
+    // damit der Kassenwart auch Office-Dokumente o. ä. als Beleg ablegen kann.
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: "Datei zu groß. Maximal 10 MB erlaubt." },
@@ -108,7 +101,7 @@ export async function POST(
       year,
       fileName,
       fileBuffer,
-      file.type
+      file.type || "application/octet-stream"
     )
 
     // 8. Share-Link in document_ref speichern
