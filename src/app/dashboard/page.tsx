@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { useDebounce } from "@/hooks/use-debounce"
-import { useCategories } from "@/hooks/use-categories"
+import { useCategories, setCategoriesForTransaction } from "@/hooks/use-categories"
 import { KpiCards } from "@/components/kpi-cards"
 import { TransactionFilterBar } from "@/components/transaction-filter-bar"
 import { TransactionTable } from "@/components/transaction-table"
@@ -18,6 +18,7 @@ import { toast } from "sonner"
 import type {
   TransactionSummary,
   Transaction,
+  Category,
   EditableTransactionField,
   TransactionUpdateFields,
 } from "@/lib/types"
@@ -264,6 +265,40 @@ export default function DashboardPage() {
     [fetchSummary]
   )
 
+  // Inline-Kategorie-Update: setzt Kategorien einer Buchung direkt aus der
+  // Tabellen-Zelle, optimistisch mit Rollback bei Fehlern.
+  const handleUpdateCategories = useCallback(
+    async (id: string, categoryIds: string[]) => {
+      const previous = transactions.find((t) => t.id === id)?.categories ?? []
+
+      const nextCategories: Category[] = categoryIds
+        .map((cid) => allCategories.find((c) => c.id === cid))
+        .filter((c): c is Category => c !== undefined)
+
+      // Optimistic Update
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.id === id ? { ...t, categories: nextCategories } : t
+        )
+      )
+
+      try {
+        await setCategoriesForTransaction(id, categoryIds)
+        toast.success("Kategorien gespeichert")
+      } catch (err) {
+        // Rollback
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, categories: previous } : t))
+        )
+        toast.error(
+          err instanceof Error ? err.message : "Fehler beim Speichern"
+        )
+        throw err
+      }
+    },
+    [transactions, allCategories]
+  )
+
   // PROJ-9: Handler für Beleg-Upload - aktualisiert document_ref lokal
   const handleDocumentUploaded = useCallback(
     (transactionId: string, documentRef: string) => {
@@ -461,7 +496,11 @@ export default function DashboardPage() {
         onToggleSelectAllOnPage={toggleSelectAllOnPage}
         onUpdateTransaction={handleUpdateTransaction}
         onUpdateTransactionMulti={handleUpdateTransactionMulti}
+        onUpdateCategories={
+          hasPermission("edit_transactions") ? handleUpdateCategories : undefined
+        }
         onDocumentUploaded={handleDocumentUploaded}
+        allCategories={allCategories}
       />
 
       {/* PROJ-12: Bulk-Kategorisierung Dialog */}

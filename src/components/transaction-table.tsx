@@ -40,6 +40,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { InlineEditField } from "@/components/inline-edit-field"
+import { InlineCategoryEdit } from "@/components/inline-category-edit"
 import { BelegUploadDialog } from "@/components/beleg-upload-dialog"
 import { EditTransactionDialog } from "@/components/edit-transaction-dialog"
 import { CategoryBadge } from "@/components/category-badge"
@@ -68,7 +69,9 @@ interface TransactionTableProps {
   onToggleSelectAllOnPage: (ids: string[], select: boolean) => void
   onUpdateTransaction?: (id: string, field: EditableTransactionField, value: string) => Promise<void>
   onUpdateTransactionMulti?: (id: string, updates: TransactionUpdateFields) => Promise<void>
+  onUpdateCategories?: (id: string, categoryIds: string[]) => Promise<void>
   onDocumentUploaded?: (transactionId: string, documentRef: string) => void
+  allCategories?: Category[]
 }
 
 function formatCurrency(value: number): string {
@@ -143,7 +146,9 @@ export function TransactionTable({
   onToggleSelectAllOnPage,
   onUpdateTransaction,
   onUpdateTransactionMulti,
+  onUpdateCategories,
   onDocumentUploaded,
+  allCategories = [],
 }: TransactionTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadTransaction, setUploadTransaction] = useState<Transaction | null>(null)
@@ -350,9 +355,17 @@ export function TransactionTable({
                         {formatCurrency(Number(t.balance_after))}
                       </TableCell>
 
-                      {/* Kategorien - PROJ-12 */}
+                      {/* Kategorien - PROJ-12 (inline editierbar) */}
                       <TableCell className="max-w-[180px]">
-                        {txCategories.length === 0 ? (
+                        {onUpdateCategories ? (
+                          <InlineCategoryEdit
+                            transactionId={t.id}
+                            categories={txCategories}
+                            allCategories={allCategories}
+                            canEdit={canEdit}
+                            onSave={onUpdateCategories}
+                          />
+                        ) : txCategories.length === 0 ? (
                           <span className="text-xs text-muted-foreground">—</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
