@@ -26,6 +26,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   AlertCircle,
   ArrowUpDown,
@@ -41,9 +42,11 @@ import { Button } from "@/components/ui/button"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { BelegUploadDialog } from "@/components/beleg-upload-dialog"
 import { EditTransactionDialog } from "@/components/edit-transaction-dialog"
+import { CategoryBadge } from "@/components/category-badge"
 import { isValidSeafileLink } from "@/lib/seafile-link"
 import type {
   Transaction,
+  Category,
   EditableTransactionField,
   TransactionUpdateFields,
 } from "@/lib/types"
@@ -58,8 +61,11 @@ interface TransactionTableProps {
   sortDir: string
   canEdit: boolean
   seafileConfigured?: boolean
+  selectedIds: Set<string>
   onSort: (field: string) => void
   onPageChange: (page: number) => void
+  onToggleSelect: (id: string) => void
+  onToggleSelectAllOnPage: (ids: string[], select: boolean) => void
   onUpdateTransaction?: (id: string, field: EditableTransactionField, value: string) => Promise<void>
   onUpdateTransactionMulti?: (id: string, updates: TransactionUpdateFields) => Promise<void>
   onDocumentUploaded?: (transactionId: string, documentRef: string) => void
@@ -99,16 +105,18 @@ function SortIcon({
   )
 }
 
-function SkeletonRows() {
+function SkeletonRows({ showCheckbox }: { showCheckbox: boolean }) {
   return (
     <>
       {Array.from({ length: 8 }).map((_, i) => (
         <TableRow key={i}>
+          {showCheckbox && <TableCell><Skeleton className="h-4 w-4" /></TableCell>}
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
           <TableCell><Skeleton className="h-4 w-48" /></TableCell>
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
@@ -128,8 +136,11 @@ export function TransactionTable({
   sortDir,
   canEdit,
   seafileConfigured = false,
+  selectedIds,
   onSort,
   onPageChange,
+  onToggleSelect,
+  onToggleSelectAllOnPage,
   onUpdateTransaction,
   onUpdateTransactionMulti,
   onDocumentUploaded,
@@ -138,6 +149,17 @@ export function TransactionTable({
   const [uploadTransaction, setUploadTransaction] = useState<Transaction | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editTransaction, setEditTransaction] = useState<Transaction | null>(null)
+
+  const showSelectionColumn = canEdit
+
+  const visibleIds = transactions.map((t) => t.id)
+  const selectedOnPage = visibleIds.filter((id) => selectedIds.has(id)).length
+  const headerCheckboxState: boolean | "indeterminate" =
+    selectedOnPage === 0
+      ? false
+      : selectedOnPage === visibleIds.length
+        ? true
+        : "indeterminate"
 
   const handleOpenUploadDialog = useCallback((transaction: Transaction) => {
     setUploadTransaction(transaction)
@@ -194,6 +216,17 @@ export function TransactionTable({
           <Table>
             <TableHeader>
               <TableRow>
+                {showSelectionColumn && (
+                  <TableHead className="w-[44px]">
+                    <Checkbox
+                      checked={headerCheckboxState}
+                      onCheckedChange={(value) =>
+                        onToggleSelectAllOnPage(visibleIds, value === true)
+                      }
+                      aria-label="Alle Buchungen auf dieser Seite auswählen"
+                    />
+                  </TableHead>
+                )}
                 <TableHead className="w-[110px]">
                   <Button
                     variant="ghost"
@@ -232,6 +265,7 @@ export function TransactionTable({
                 </TableHead>
                 <TableHead className="w-[120px] text-right">Ausgabe</TableHead>
                 <TableHead className="w-[120px] text-right">Saldo</TableHead>
+                <TableHead className="w-[180px]">Kategorien</TableHead>
                 <TableHead className="hidden w-[180px] lg:table-cell">Bemerkung</TableHead>
                 <TableHead className="hidden w-[120px] xl:table-cell">Beleg</TableHead>
                 <TableHead className="hidden w-[100px] xl:table-cell">
@@ -247,11 +281,11 @@ export function TransactionTable({
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <SkeletonRows />
+                <SkeletonRows showCheckbox={showSelectionColumn} />
               ) : transactions.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={canEdit ? 9 : 8}
+                    colSpan={(showSelectionColumn ? 1 : 0) + (canEdit ? 10 : 9)}
                     className="h-32 text-center text-muted-foreground"
                   >
                     Keine Buchungen gefunden. Passen Sie die Filter an oder importieren Sie Kontoauszüge.
@@ -261,9 +295,20 @@ export function TransactionTable({
                 transactions.map((t) => {
                   const amount = Number(t.amount)
                   const isIncome = amount > 0
+                  const isSelected = selectedIds.has(t.id)
+                  const txCategories: Category[] = t.categories ?? []
 
                   return (
-                    <TableRow key={t.id}>
+                    <TableRow key={t.id} data-state={isSelected ? "selected" : undefined}>
+                      {showSelectionColumn && (
+                        <TableCell className="w-[44px]">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => onToggleSelect(t.id)}
+                            aria-label={`Buchung vom ${formatDate(t.booking_date)} auswählen`}
+                          />
+                        </TableCell>
+                      )}
                       {/* Datum - schreibgeschützt */}
                       <TableCell className="whitespace-nowrap text-sm">
                         {formatDate(t.booking_date)}
@@ -303,6 +348,19 @@ export function TransactionTable({
                       {/* Saldo - schreibgeschützt */}
                       <TableCell className="whitespace-nowrap text-right text-sm font-medium">
                         {formatCurrency(Number(t.balance_after))}
+                      </TableCell>
+
+                      {/* Kategorien - PROJ-12 */}
+                      <TableCell className="max-w-[180px]">
+                        {txCategories.length === 0 ? (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {txCategories.map((cat) => (
+                              <CategoryBadge key={cat.id} category={cat} />
+                            ))}
+                          </div>
+                        )}
                       </TableCell>
 
                       {/* Bemerkung - editierbar (Textarea) */}

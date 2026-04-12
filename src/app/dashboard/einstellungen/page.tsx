@@ -8,6 +8,8 @@ import { SeafileSettingsForm } from "@/components/seafile-settings-form"
 import { PasswordChangeDialog } from "@/components/password-change-dialog"
 import { MfaAktivierungDialog } from "@/components/mfa-aktivierung-dialog"
 import { MfaDeaktivierungDialog } from "@/components/mfa-deaktivierung-dialog"
+import { KategorienVerwaltung } from "@/components/kategorien-verwaltung"
+import { KategorisierungsregelnListe } from "@/components/kategorisierungsregeln-liste"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Card,
@@ -84,11 +86,15 @@ export default function EinstellungenPage() {
         </p>
       </div>
 
-      <Tabs defaultValue={defaultTab} className="max-w-2xl">
+      <Tabs defaultValue={defaultTab} className="max-w-3xl">
         <TabsList>
           {isAdmin && (
             <TabsTrigger value="integration">Integration</TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="kategorien">Kategorien</TabsTrigger>
+          )}
+          {isAdmin && <TabsTrigger value="regeln">Regeln</TabsTrigger>}
           <TabsTrigger value="sicherheit">Sicherheit</TabsTrigger>
           <TabsTrigger value="passwort">Passwort</TabsTrigger>
         </TabsList>
@@ -97,6 +103,18 @@ export default function EinstellungenPage() {
           <TabsContent value="integration" className="space-y-8 pt-4">
             <ApiSettingsForm />
             <SeafileSettingsForm />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="kategorien" className="pt-4">
+            <KategorienVerwaltung />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="regeln" className="pt-4">
+            <KategorisierungsregelnListe />
           </TabsContent>
         )}
 

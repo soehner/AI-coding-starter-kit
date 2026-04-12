@@ -139,7 +139,10 @@ export async function PATCH(
         updated_at,
         updated_by,
         statement_id,
-        bank_statements!inner(statement_number, file_name, file_path)
+        bank_statements!inner(statement_number, file_name, file_path),
+        transaction_categories(
+          category:categories(id, name, color, created_at)
+        )
       `
       )
       .single()
@@ -152,7 +155,32 @@ export async function PATCH(
       )
     }
 
-    return NextResponse.json(data)
+    // transaction_categories → categories flach zurückgeben
+    type RawRow = {
+      transaction_categories?: Array<{
+        category: {
+          id: string
+          name: string
+          color: string
+          created_at: string
+        } | null
+      }> | null
+    } & Record<string, unknown>
+
+    const row = data as unknown as RawRow
+    const { transaction_categories, ...rest } = row
+    const categories = (transaction_categories ?? [])
+      .map((tc) => tc.category)
+      .filter(
+        (c): c is {
+          id: string
+          name: string
+          color: string
+          created_at: string
+        } => c !== null
+      )
+
+    return NextResponse.json({ ...rest, categories })
   } catch (error) {
     console.error("Transaction PATCH Fehler:", error)
     return NextResponse.json(

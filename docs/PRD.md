@@ -32,6 +32,9 @@
 | P1 | PROJ-9: Seafile-Integration für Belege & Kontoauszüge | Planned |
 | P1 | PROJ-10: Genehmigungssystem für Vereinsanträge | Planned |
 | P1 | PROJ-11: Kostenübernahme-Antrag (iFrame-Formular) | Planned |
+| P2 | PROJ-12: Buchungskategorisierung | Planned |
+| P2 | PROJ-13: Automatische Kategorisierungsregeln | Planned |
+| P2 | PROJ-14: Kategoriebasierter Zugriff für Betrachter | Planned |
 
 ## Success Metrics
 - Zeiteinsparung: Manuelles Übertragen entfällt (aktuell ~30 Min pro Kontoauszug)

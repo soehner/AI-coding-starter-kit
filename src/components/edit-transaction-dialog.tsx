@@ -16,6 +16,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Save } from "lucide-react"
+import { CategoryMultiSelect } from "@/components/category-multi-select"
+import {
+  useCategories,
+  setCategoriesForTransaction,
+} from "@/hooks/use-categories"
 import type { Transaction, TransactionUpdateFields } from "@/lib/types"
 
 interface EditTransactionDialogProps {
@@ -34,7 +39,7 @@ interface FormState {
   bookingType: BookingType
   amountAbs: string
   balance_after: string
-  category: string
+  categoryIds: string[]
   note: string
 }
 
@@ -50,7 +55,7 @@ function parseAmountInput(raw: string): number | null {
   return num
 }
 
-function toFormState(tx: Transaction): FormState {
+function toFormState(tx: Transaction, initialCategoryIds: string[]): FormState {
   const amount = Number(tx.amount)
   return {
     booking_date: tx.booking_date ?? "",
@@ -59,7 +64,7 @@ function toFormState(tx: Transaction): FormState {
     bookingType: amount >= 0 ? "einnahme" : "ausgabe",
     amountAbs: Math.abs(amount).toFixed(2).replace(".", ","),
     balance_after: Number(tx.balance_after).toFixed(2).replace(".", ","),
-    category: tx.category ?? "",
+    categoryIds: initialCategoryIds,
     note: tx.note ?? "",
   }
 }
@@ -74,10 +79,13 @@ export function EditTransactionDialog({
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const allCategories = useCategories()
+
   // Formular neu befüllen, sobald sich die Transaktion ändert
   useEffect(() => {
     if (transaction && open) {
-      setForm(toFormState(transaction))
+      const initialCategoryIds = (transaction.categories ?? []).map((c) => c.id)
+      setForm(toFormState(transaction, initialCategoryIds))
       setError(null)
     }
     if (!open) {
@@ -136,12 +144,15 @@ export function EditTransactionDialog({
       description: form.description.trim(),
       amount: signedAmount,
       balance_after: balance,
-      category: form.category.trim() ? form.category.trim() : null,
       note: form.note.trim() ? form.note.trim() : null,
     }
 
     setIsSaving(true)
     try {
+      // PROJ-12 (BUG-003): Kategorien ZUERST speichern, damit die PATCH-Response
+      // anschließend die aktualisierten Kategorien im `categories`-Join enthält
+      // und den Dashboard-State korrekt aktualisiert.
+      await setCategoriesForTransaction(transaction.id, form.categoryIds)
       await onSave(transaction.id, updates)
       onOpenChange(false)
     } catch (err) {
@@ -254,17 +265,19 @@ export function EditTransactionDialog({
             </div>
           </div>
 
-          {/* Kategorie */}
+          {/* Kategorien - PROJ-12 */}
           <div className="space-y-1.5">
-            <Label htmlFor="category">Kategorie (optional)</Label>
-            <Input
-              id="category"
-              type="text"
-              value={form.category}
-              onChange={(e) => updateField("category", e.target.value)}
-              maxLength={100}
+            <Label>Kategorien</Label>
+            <CategoryMultiSelect
+              allCategories={allCategories}
+              selectedIds={form.categoryIds}
+              onChange={(next) => updateField("categoryIds", next)}
               disabled={isSaving}
-              placeholder="z. B. Spenden, Mitgliedsbeitrag, Miete"
+              placeholder={
+                allCategories.length === 0
+                  ? "Noch keine Kategorien angelegt"
+                  : "Kategorien auswählen…"
+              }
             />
           </div>
 

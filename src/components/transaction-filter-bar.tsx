@@ -1,6 +1,9 @@
 "use client"
 
+import { useState } from "react"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -8,16 +11,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Search } from "lucide-react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Badge } from "@/components/ui/badge"
+import { ChevronsUpDown, Search, Tags } from "lucide-react"
+import { cn } from "@/lib/utils"
+import type { Category } from "@/lib/types"
+
+export const UNCATEGORIZED_FILTER_VALUE = "__uncategorized__"
 
 interface TransactionFilterBarProps {
   availableYears: string[]
   selectedYear: string
   selectedMonth: string
   searchValue: string
+  allCategories: Category[]
+  selectedCategoryFilter: string[]
   onYearChange: (year: string) => void
   onMonthChange: (month: string) => void
   onSearchChange: (search: string) => void
+  onCategoryFilterChange: (values: string[]) => void
 }
 
 const MONTHS = [
@@ -41,13 +57,31 @@ export function TransactionFilterBar({
   selectedYear,
   selectedMonth,
   searchValue,
+  allCategories,
+  selectedCategoryFilter,
   onYearChange,
   onMonthChange,
   onSearchChange,
+  onCategoryFilterChange,
 }: TransactionFilterBarProps) {
+  const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false)
+
+  function toggleFilter(value: string) {
+    if (selectedCategoryFilter.includes(value)) {
+      onCategoryFilterChange(selectedCategoryFilter.filter((v) => v !== value))
+    } else {
+      onCategoryFilterChange([...selectedCategoryFilter, value])
+    }
+  }
+
+  const filterLabel =
+    selectedCategoryFilter.length === 0
+      ? "Alle Kategorien"
+      : `${selectedCategoryFilter.length} ausgewählt`
+
   return (
     <div
-      className="flex flex-col gap-3 sm:flex-row sm:items-center"
+      className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center"
       role="search"
       aria-label="Buchungen filtern"
     >
@@ -78,7 +112,83 @@ export function TransactionFilterBar({
         </SelectContent>
       </Select>
 
-      <div className="relative flex-1">
+      <Popover open={categoryPopoverOpen} onOpenChange={setCategoryPopoverOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={categoryPopoverOpen}
+            aria-label="Nach Kategorie filtern"
+            className={cn(
+              "w-full justify-between font-normal sm:w-[200px]",
+              selectedCategoryFilter.length === 0 && "text-muted-foreground"
+            )}
+          >
+            <span className="flex items-center gap-1.5 truncate">
+              <Tags className="h-3.5 w-3.5 shrink-0" />
+              {filterLabel}
+            </span>
+            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[280px] p-0" align="start">
+          <div className="max-h-[300px] overflow-auto p-1">
+            <button
+              type="button"
+              onClick={() => toggleFilter(UNCATEGORIZED_FILTER_VALUE)}
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+            >
+              <Checkbox
+                checked={selectedCategoryFilter.includes(UNCATEGORIZED_FILTER_VALUE)}
+                aria-hidden="true"
+                tabIndex={-1}
+              />
+              <span className="italic text-muted-foreground">Ohne Kategorie</span>
+            </button>
+            {allCategories.length === 0 ? (
+              <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+                Noch keine Kategorien angelegt.
+              </div>
+            ) : (
+              allCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => toggleFilter(cat.id)}
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+                >
+                  <Checkbox
+                    checked={selectedCategoryFilter.includes(cat.id)}
+                    aria-hidden="true"
+                    tabIndex={-1}
+                  />
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: cat.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="truncate">{cat.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+          {selectedCategoryFilter.length > 0 && (
+            <div className="border-t p-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => onCategoryFilterChange([])}
+              >
+                Auswahl zurücksetzen
+              </Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      <div className="relative flex-1 sm:min-w-[220px]">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <Input
           type="search"
@@ -89,6 +199,38 @@ export function TransactionFilterBar({
           aria-label="Buchungstext suchen"
         />
       </div>
+
+      {selectedCategoryFilter.length > 0 && (
+        <div className="hidden w-full flex-wrap gap-1 sm:flex">
+          {selectedCategoryFilter.map((value) => {
+            if (value === UNCATEGORIZED_FILTER_VALUE) {
+              return (
+                <Badge
+                  key={value}
+                  variant="secondary"
+                  className="cursor-pointer italic"
+                  onClick={() => toggleFilter(value)}
+                >
+                  Ohne Kategorie ×
+                </Badge>
+              )
+            }
+            const cat = allCategories.find((c) => c.id === value)
+            if (!cat) return null
+            return (
+              <Badge
+                key={value}
+                variant="outline"
+                className="cursor-pointer"
+                style={{ borderColor: cat.color, color: cat.color }}
+                onClick={() => toggleFilter(value)}
+              >
+                {cat.name} ×
+              </Badge>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

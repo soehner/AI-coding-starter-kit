@@ -25,6 +25,10 @@
 | PROJ-10 | Genehmigungssystem für Vereinsanträge | Deployed | [PROJ-10-genehmigungssystem.md](PROJ-10-genehmigungssystem.md) | 2026-04-10 |
 | PROJ-11 | Kostenübernahme-Antrag (iFrame-Formular) | Deployed | [PROJ-11-kostenuebernahme-antrag.md](PROJ-11-kostenuebernahme-antrag.md) | 2026-04-11 |
 
+| PROJ-12 | Buchungskategorisierung | Deployed | [PROJ-12-buchungskategorisierung.md](PROJ-12-buchungskategorisierung.md) | 2026-04-12 |
+| PROJ-13 | Automatische Kategorisierungsregeln | In Progress | [PROJ-13-kategorisierungsregeln.md](PROJ-13-kategorisierungsregeln.md) | 2026-04-12 |
+| PROJ-14 | Kategoriebasierter Zugriff für Betrachter | Planned | [PROJ-14-kategoriebasierter-zugriff.md](PROJ-14-kategoriebasierter-zugriff.md) | 2026-04-12 |
+
 <!-- Add features above this line -->
 
-## Next Available ID: PROJ-12
+## Next Available ID: PROJ-15

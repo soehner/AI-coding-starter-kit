@@ -28,6 +28,11 @@ export interface ParsedTransaction {
   balance_after: number
   isDuplicate?: boolean
   isRemoved?: boolean
+  /**
+   * PROJ-13: Vom Server vorgeschlagene Kategorien basierend auf aktiven
+   * Regeln. Wird in der Vorschau angezeigt und beim Bestätigen übernommen.
+   */
+  auto_category_ids?: string[]
 }
 
 export interface ParsedStatementResult {
@@ -61,6 +66,54 @@ export interface Category {
   created_at: string
 }
 
+// PROJ-13: Automatische Kategorisierungsregeln
+export type CategorizationRuleType =
+  | "text_contains"
+  | "counterpart_contains"
+  | "amount_range"
+  | "month_quarter"
+
+export type AmountDirection = "both" | "in" | "out"
+
+export interface TextContainsCondition {
+  term: string
+}
+
+export interface CounterpartContainsCondition {
+  term: string
+}
+
+export interface AmountRangeCondition {
+  min: number
+  max: number
+  direction: AmountDirection
+}
+
+export interface MonthQuarterCondition {
+  months?: number[]
+  quarters?: number[]
+}
+
+export type CategorizationRuleCondition =
+  | TextContainsCondition
+  | CounterpartContainsCondition
+  | AmountRangeCondition
+  | MonthQuarterCondition
+
+export interface CategorizationRule {
+  id: string
+  name: string
+  rule_type: CategorizationRuleType
+  condition: CategorizationRuleCondition
+  category_id: string
+  category?: Category | null
+  is_active: boolean
+  sort_order: number
+  /** Vom Backend gesetzt, wenn Zielkategorie gelöscht wurde. */
+  is_invalid?: boolean
+  created_at: string
+}
+
 // PROJ-4: Dashboard-Typen
 export interface Transaction {
   id: string
@@ -81,6 +134,8 @@ export interface Transaction {
     file_name: string
     file_path: string | null
   }
+  // PROJ-12: vom GET /api/transactions und PATCH mitgeliefert
+  categories: Category[]
 }
 
 // PROJ-7: Granulare Feature-Berechtigungen

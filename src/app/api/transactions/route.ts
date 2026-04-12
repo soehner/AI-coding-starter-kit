@@ -4,6 +4,13 @@ import { z } from "zod"
 
 const PAGE_SIZE = 50
 
+/**
+ * Spezial-Wert für den Filter „Ohne Kategorie". Muss mit der Konstante
+ * UNCATEGORIZED_FILTER_VALUE in src/components/transaction-filter-bar.tsx
+ * übereinstimmen.
+ */
+const UNCATEGORIZED = "__uncategorized__"
+
 const transactionsQuerySchema = z.object({
   year: z
     .string()
@@ -31,6 +38,14 @@ const transactionsQuerySchema = z.object({
       message: "Ungültige Sortierrichtung.",
     })
     .optional(),
+  /**
+   * Kategorie-Filter: kommaseparierte Liste von UUIDs. Zusätzlich der
+   * Spezial-Wert `__uncategorized__` für Buchungen ohne Kategorie.
+   */
+  categories: z
+    .string()
+    .max(2000, "Kategorie-Filter ist zu lang.")
+    .optional(),
 })
 
 export async function GET(request: Request) {
@@ -57,6 +72,7 @@ export async function GET(request: Request) {
       page: searchParams.get("page") || undefined,
       sort: searchParams.get("sort") || undefined,
       dir: searchParams.get("dir") || undefined,
+      categories: searchParams.get("categories") || undefined,
     }
 
     const validation = transactionsQuerySchema.safeParse(rawParams)
@@ -72,7 +88,103 @@ export async function GET(request: Request) {
     const sortBy = validation.data.sort || "booking_date"
     const sortDir = validation.data.dir || "desc"
 
-    // Query aufbauen
+    // --- Kategorie-Filter parsen ---
+    const categoryFilterValues = (validation.data.categories || "")
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0)
+
+    const wantUncategorized = categoryFilterValues.includes(UNCATEGORIZED)
+    const wantCategoryIds = categoryFilterValues.filter(
+      (v) => v !== UNCATEGORIZED
+    )
+
+    // UUID-Validierung für übergebene Kategorie-IDs
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    for (const id of wantCategoryIds) {
+      if (!uuidRegex.test(id)) {
+        return NextResponse.json(
+          { error: "Ungültige Kategorie-ID im Filter." },
+          { status: 400 }
+        )
+      }
+    }
+
+    // --- Kategorie-Vorfilter: erlaubte Transaktions-IDs bestimmen ---
+    // Wir ermitteln einmalig, welche Transaktions-IDs dem Kategorie-Filter
+    // entsprechen, und schränken die Hauptquery darauf ein (serverseitig).
+    let allowedTxIds: string[] | null = null
+
+    if (categoryFilterValues.length > 0) {
+      allowedTxIds = []
+
+      if (wantCategoryIds.length > 0) {
+        const { data: matched, error: matchErr } = await supabase
+          .from("transaction_categories")
+          .select("transaction_id")
+          .in("category_id", wantCategoryIds)
+          .limit(100000)
+
+        if (matchErr) {
+          return NextResponse.json(
+            {
+              error:
+                "Fehler beim Kategorie-Filter: " + matchErr.message,
+            },
+            { status: 500 }
+          )
+        }
+
+        const ids = new Set(
+          (matched ?? []).map((r) => r.transaction_id as string)
+        )
+        allowedTxIds.push(...ids)
+      }
+
+      if (wantUncategorized) {
+        // BUG-005 Fix: Statt zweier limit(100000)-Queries die SQL-Funktion
+        // uncategorized_transaction_ids nutzen, die Filterung per WHERE NOT EXISTS
+        // direkt in der Datenbank ausführt.
+        const { data: uncat, error: uncatErr } = await supabase.rpc(
+          "uncategorized_transaction_ids",
+          {
+            p_year: year ?? null,
+            p_month: month ?? null,
+            p_search: search ?? null,
+          }
+        )
+
+        if (uncatErr) {
+          return NextResponse.json(
+            {
+              error:
+                "Fehler beim Kategorie-Filter: " + uncatErr.message,
+            },
+            { status: 500 }
+          )
+        }
+
+        for (const row of (uncat ?? []) as Array<{ id: string }>) {
+          allowedTxIds.push(row.id)
+        }
+      }
+
+      // Duplikate entfernen
+      allowedTxIds = Array.from(new Set(allowedTxIds))
+
+      // Leere Ergebnismenge direkt zurückgeben
+      if (allowedTxIds.length === 0) {
+        return NextResponse.json({
+          transactions: [],
+          total: 0,
+          page,
+          pageSize: PAGE_SIZE,
+          totalPages: 0,
+        })
+      }
+    }
+
+    // --- Hauptquery ---
     let query = supabase
       .from("transactions")
       .select(
@@ -90,7 +202,10 @@ export async function GET(request: Request) {
         updated_at,
         updated_by,
         statement_id,
-        bank_statements!inner(statement_number, file_name, file_path)
+        bank_statements!inner(statement_number, file_name, file_path),
+        transaction_categories(
+          category:categories(id, name, color, created_at)
+        )
       `,
         { count: "exact" }
       )
@@ -113,10 +228,13 @@ export async function GET(request: Request) {
       query = query.ilike("description", `%${search}%`)
     }
 
+    if (allowedTxIds !== null) {
+      query = query.in("id", allowedTxIds)
+    }
+
     // Sortierung
     query = query.order(sortBy, { ascending: sortDir === "asc" })
 
-    // Sekundärsortierung bei gleichem Datum
     if (sortBy !== "booking_date") {
       query = query.order("booking_date", { ascending: false })
     } else {
@@ -137,8 +255,38 @@ export async function GET(request: Request) {
       )
     }
 
+    // Categories flach in die Transaktion übernehmen
+    type RawRow = {
+      id: string
+      transaction_categories?: Array<{
+        category: {
+          id: string
+          name: string
+          color: string
+          created_at: string
+        } | null
+      }> | null
+    } & Record<string, unknown>
+
+    const rows = (data || []) as unknown as RawRow[]
+
+    const transformed = rows.map((row) => {
+      const { transaction_categories, ...rest } = row
+      const categories = (transaction_categories ?? [])
+        .map((tc) => tc.category)
+        .filter(
+          (c): c is {
+            id: string
+            name: string
+            color: string
+            created_at: string
+          } => c !== null
+        )
+      return { ...rest, categories }
+    })
+
     return NextResponse.json({
-      transactions: data || [],
+      transactions: transformed,
       total: count || 0,
       page,
       pageSize: PAGE_SIZE,

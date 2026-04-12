@@ -92,7 +92,10 @@ export async function GET(request: Request) {
     let query = supabase
       .from("transactions")
       .select(
-        "id, booking_date, value_date, description, amount, balance_after, category, note, document_ref, statement_ref"
+        `id, booking_date, value_date, description, amount, balance_after, category, note, document_ref, statement_ref,
+         transaction_categories(
+           category:categories(id, name)
+         )`
       )
       .order("booking_date", { ascending: true })
       .order("id", { ascending: true })
@@ -117,7 +120,28 @@ export async function GET(request: Request) {
       )
     }
 
-    const rows = transactions || []
+    type RawTxRow = {
+      id: string
+      booking_date: string
+      value_date: string
+      description: string | null
+      amount: number
+      balance_after: number
+      category: string | null
+      note: string | null
+      document_ref: string | null
+      statement_ref: string | null
+      transaction_categories?: Array<{
+        category: { id: string; name: string } | null
+      }> | null
+    }
+
+    const rows = ((transactions || []) as unknown as RawTxRow[]).map((t) => {
+      const categoryNames = (t.transaction_categories ?? [])
+        .map((tc) => tc.category?.name)
+        .filter((n): n is string => !!n)
+      return { ...t, category_names: categoryNames }
+    })
 
     // --- Eröffnungssaldo berechnen ---
     let openingBalance = 0
@@ -176,6 +200,7 @@ export async function GET(request: Request) {
       { key: "L", width: 15 },
       { key: "M", width: 18 },
       { key: "N", width: 18 },
+      { key: "O", width: 30 },
     ]
 
     const currencyFormat = '#,##0.00 "€"'
@@ -225,6 +250,7 @@ export async function GET(request: Request) {
       "Saldo",
       "Belege-Referenz",
       "Kontoauszug-Referenz",
+      "Kategorien",
     ]
 
     const headerRow = worksheet.getRow(7)
@@ -298,6 +324,9 @@ export async function GET(request: Request) {
 
       // Spalte N: Kontoauszug-Referenz
       row.getCell(14).value = tx.statement_ref || ""
+
+      // Spalte O: Kategorien (kommagetrennt)
+      row.getCell(15).value = tx.category_names.join(", ")
     })
 
     // Währungsformat auf leere Zellen in den Währungsspalten anwenden

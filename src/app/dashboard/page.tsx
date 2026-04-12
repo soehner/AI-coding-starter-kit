@@ -4,13 +4,16 @@ import { useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { useDebounce } from "@/hooks/use-debounce"
+import { useCategories } from "@/hooks/use-categories"
 import { KpiCards } from "@/components/kpi-cards"
 import { TransactionFilterBar } from "@/components/transaction-filter-bar"
 import { TransactionTable } from "@/components/transaction-table"
 import { KassenbuchExportButton } from "@/components/kassenbuch-export-button"
+import { BulkKategorisierungDialog } from "@/components/bulk-kategorisierung-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { AlertCircle, Tags, X } from "lucide-react"
 import { toast } from "sonner"
 import type {
   TransactionSummary,
@@ -42,6 +45,12 @@ export default function DashboardPage() {
   )
 
   const debouncedSearch = useDebounce(search, 300)
+
+  // PROJ-12: Kategorie-Filter, Auswahl, Bulk-Dialog
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
+  const allCategories = useCategories()
 
   // Daten-State
   const [summary, setSummary] = useState<TransactionSummary | null>(null)
@@ -138,42 +147,45 @@ export default function DashboardPage() {
     fetchSummary()
   }, [authLoading, fetchSummary])
 
-  // Transaktionen laden
+  // Transaktionen laden – extrahiert als useCallback, damit es auch manuell
+  // (z. B. nach einer Bulk-Kategorisierung) neu ausgelöst werden kann.
+  const fetchTransactions = useCallback(async () => {
+    setTableLoading(true)
+    setTableError(null)
+
+    try {
+      const params = new URLSearchParams()
+      if (year !== "all") params.set("year", year)
+      if (month !== "all") params.set("month", month)
+      if (debouncedSearch) params.set("search", debouncedSearch)
+      if (categoryFilter.length > 0) {
+        params.set("categories", categoryFilter.join(","))
+      }
+      params.set("page", page.toString())
+      params.set("sort", sortBy)
+      params.set("dir", sortDir)
+
+      const res = await fetch(`/api/transactions?${params}`)
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Fehler beim Laden der Buchungen")
+      }
+      const data = await res.json()
+      setTransactions(data.transactions)
+      setTotalPages(data.totalPages)
+    } catch (err) {
+      setTableError(
+        err instanceof Error ? err.message : "Unbekannter Fehler"
+      )
+    } finally {
+      setTableLoading(false)
+    }
+  }, [year, month, debouncedSearch, categoryFilter, page, sortBy, sortDir])
+
   useEffect(() => {
     if (authLoading) return
-
-    const fetchTransactions = async () => {
-      setTableLoading(true)
-      setTableError(null)
-
-      try {
-        const params = new URLSearchParams()
-        if (year !== "all") params.set("year", year)
-        if (month !== "all") params.set("month", month)
-        if (debouncedSearch) params.set("search", debouncedSearch)
-        params.set("page", page.toString())
-        params.set("sort", sortBy)
-        params.set("dir", sortDir)
-
-        const res = await fetch(`/api/transactions?${params}`)
-        if (!res.ok) {
-          const data = await res.json()
-          throw new Error(data.error || "Fehler beim Laden der Buchungen")
-        }
-        const data = await res.json()
-        setTransactions(data.transactions)
-        setTotalPages(data.totalPages)
-      } catch (err) {
-        setTableError(
-          err instanceof Error ? err.message : "Unbekannter Fehler"
-        )
-      } finally {
-        setTableLoading(false)
-      }
-    }
-
     fetchTransactions()
-  }, [year, month, debouncedSearch, page, sortBy, sortDir, authLoading])
+  }, [authLoading, fetchTransactions])
 
   // PROJ-5: Optimistic Update für Inline-Bearbeitung
   const handleUpdateTransaction = useCallback(
@@ -264,6 +276,35 @@ export default function DashboardPage() {
     },
     []
   )
+
+  // PROJ-12: Selection-Handler
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSelectAllOnPage = useCallback(
+    (ids: string[], select: boolean) => {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        if (select) {
+          ids.forEach((id) => next.add(id))
+        } else {
+          ids.forEach((id) => next.delete(id))
+        }
+        return next
+      })
+    },
+    []
+  )
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
 
   // Filter-Handler
   const handleYearChange = (value: string) => {
@@ -358,9 +399,15 @@ export default function DashboardPage() {
             selectedYear={year}
             selectedMonth={month}
             searchValue={search}
+            allCategories={allCategories}
+            selectedCategoryFilter={categoryFilter}
             onYearChange={handleYearChange}
             onMonthChange={handleMonthChange}
             onSearchChange={handleSearchChange}
+            onCategoryFilterChange={(v) => {
+              setCategoryFilter(v)
+              setPage(1)
+            }}
           />
         </div>
         {hasPermission("export_excel") && (
@@ -371,6 +418,30 @@ export default function DashboardPage() {
           />
         )}
       </div>
+
+      {/* PROJ-12: Sticky Massenaktions-Leiste */}
+      {hasPermission("edit_transactions") && selectedIds.size > 0 && (
+        <div className="sticky top-16 z-20 flex flex-wrap items-center gap-3 rounded-md border border-primary/40 bg-primary/5 px-4 py-2 shadow-sm backdrop-blur">
+          <span className="text-sm font-medium">
+            {selectedIds.size} Buchung{selectedIds.size === 1 ? "" : "en"} ausgewählt
+          </span>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => setBulkDialogOpen(true)}>
+              <Tags className="mr-1.5 h-4 w-4" />
+              Kategorie zuweisen
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearSelection}
+              aria-label="Auswahl aufheben"
+            >
+              <X className="mr-1.5 h-4 w-4" />
+              Auswahl aufheben
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Buchungs-Tabelle */}
       <TransactionTable
@@ -383,11 +454,27 @@ export default function DashboardPage() {
         sortDir={sortDir}
         canEdit={hasPermission("edit_transactions")}
         seafileConfigured={seafileConfigured}
+        selectedIds={selectedIds}
         onSort={handleSort}
         onPageChange={handlePageChange}
+        onToggleSelect={toggleSelect}
+        onToggleSelectAllOnPage={toggleSelectAllOnPage}
         onUpdateTransaction={handleUpdateTransaction}
         onUpdateTransactionMulti={handleUpdateTransactionMulti}
         onDocumentUploaded={handleDocumentUploaded}
+      />
+
+      {/* PROJ-12: Bulk-Kategorisierung Dialog */}
+      <BulkKategorisierungDialog
+        open={bulkDialogOpen}
+        onOpenChange={setBulkDialogOpen}
+        selectedTransactionIds={Array.from(selectedIds)}
+        onDone={() => {
+          clearSelection()
+          // BUG-002 Fix: Tabelle nach Bulk-Aktion neu laden, damit die
+          // aktualisierten Kategorie-Badges erscheinen.
+          fetchTransactions()
+        }}
       />
     </div>
   )
