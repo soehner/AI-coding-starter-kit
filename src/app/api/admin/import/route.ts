@@ -1,3 +1,4 @@
+import "@/lib/pdfjs-polyfills"
 import { NextResponse } from "next/server"
 import { requirePermission } from "@/lib/require-permission"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"

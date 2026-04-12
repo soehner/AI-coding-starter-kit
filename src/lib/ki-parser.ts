@@ -1,3 +1,4 @@
+import "@/lib/pdfjs-polyfills"
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
 import type { KiProvider, ParsedTransaction, ParsedStatementResult } from "@/lib/types"
