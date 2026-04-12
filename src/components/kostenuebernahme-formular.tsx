@@ -48,7 +48,7 @@ const kostenuebernahmeSchema = z.object({
   purpose: z
     .string()
     .min(1, "Bitte geben Sie einen Verwendungszweck ein.")
-    .max(1000, "Der Verwendungszweck darf maximal 1000 Zeichen lang sein."),
+    .max(2000, "Der Verwendungszweck darf maximal 2000 Zeichen lang sein."),
 })
 
 type KostenuebernahmeFormValues = z.infer<typeof kostenuebernahmeSchema>

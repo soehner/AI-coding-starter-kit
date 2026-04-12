@@ -36,6 +36,7 @@ interface TokenValidationResult {
     status: string
   }
   approverRole?: string
+  intent?: "genehmigt" | "abgelehnt"
   existingVote?: string
   voteSummary?: {
     total: number
@@ -357,35 +358,53 @@ export function AbstimmungsSeite({ token }: AbstimmungsSeiteProps) {
           </div>
         )}
 
-        {/* Abstimmungs-Buttons */}
-        <div className="flex gap-3 pt-2">
-          <Button
-            onClick={() => handleVote("genehmigt")}
-            disabled={isVoting}
-            className="flex-1 bg-green-600 hover:bg-green-700"
-            aria-label="Antrag genehmigen"
-          >
-            {isVoting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ThumbsUp className="mr-2 h-4 w-4" />
-            )}
-            Genehmigen
-          </Button>
-          <Button
-            onClick={() => handleVote("abgelehnt")}
-            disabled={isVoting}
-            variant="destructive"
-            className="flex-1"
-            aria-label="Antrag ablehnen"
-          >
-            {isVoting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <ThumbsDown className="mr-2 h-4 w-4" />
-            )}
-            Ablehnen
-          </Button>
+        {/* Bestätigungshinweis: der Link ist an eine Entscheidung gebunden */}
+        {tokenData?.intent && (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Sie sind im Begriff, diesen Antrag{" "}
+              <strong>
+                {tokenData.intent === "genehmigt" ? "zu genehmigen" : "abzulehnen"}
+              </strong>
+              . Falls Sie die andere Entscheidung treffen möchten, verwenden Sie
+              bitte den entsprechenden Link aus Ihrer E-Mail.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Bestätigungs-Button (nur die vom Token vorgegebene Aktion) */}
+        <div className="pt-2">
+          {tokenData?.intent === "genehmigt" ? (
+            <Button
+              onClick={() => handleVote("genehmigt")}
+              disabled={isVoting}
+              className="w-full bg-green-600 hover:bg-green-700"
+              aria-label="Antrag genehmigen"
+            >
+              {isVoting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ThumbsUp className="mr-2 h-4 w-4" />
+              )}
+              Genehmigen bestätigen
+            </Button>
+          ) : (
+            <Button
+              onClick={() => handleVote("abgelehnt")}
+              disabled={isVoting}
+              variant="destructive"
+              className="w-full"
+              aria-label="Antrag ablehnen"
+            >
+              {isVoting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ThumbsDown className="mr-2 h-4 w-4" />
+              )}
+              Ablehnen bestätigen
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
-import { verifyVoteToken, hashToken } from "@/lib/cost-request-token"
+import { verifyVoteToken } from "@/lib/cost-request-token"
 import { voteDecisionSchema } from "@/lib/validations/cost-request"
+import { isRateLimited } from "@/lib/rate-limit"
 import {
   sendVoteNotificationEmail,
   sendFinalDecisionToApprover,
   sendDecisionToApplicant,
 } from "@/lib/cost-request-emails"
+import { headers } from "next/headers"
+
+const VOTE_RATE_LIMIT_WINDOW_SECONDS = 300 // 5 Minuten
+const VOTE_RATE_LIMIT_MAX = 10
 
 const ROLE_LABELS: Record<string, string> = {
   vorsitzender_1: "1. Vorsitzender",
@@ -24,7 +29,6 @@ function formatAmount(cents: number): string {
 /**
  * GET /api/cost-requests/vote?token=...
  * Token validieren und Antragsdetails + Abstimmungsstand zurückgeben.
- * Antwortformat ist auf die AbstimmungsSeite-Komponente abgestimmt.
  */
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token")
@@ -36,7 +40,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Token kryptographisch prüfen
+  // Token kryptographisch prüfen (enthält intent)
   const tokenData = verifyVoteToken(token)
   if (!tokenData) {
     return NextResponse.json(
@@ -47,12 +51,13 @@ export async function GET(request: NextRequest) {
 
   const supabase = createAdminSupabaseClient()
 
-  // Token in DB prüfen (ob noch aktiv)
-  const tokenHashValue = hashToken(token)
+  // DB-Zeile über (request_id, role) statt Token-Hash suchen,
+  // damit sowohl Approve- als auch Reject-Token gültig sind.
   const { data: dbToken, error: tokenError } = await supabase
     .from("cost_request_tokens")
     .select("id, status, cost_request_id, approval_role")
-    .eq("token_hash", tokenHashValue)
+    .eq("cost_request_id", tokenData.requestId)
+    .eq("approval_role", tokenData.approvalRole)
     .single()
 
   if (tokenError || !dbToken) {
@@ -63,7 +68,6 @@ export async function GET(request: NextRequest) {
   }
 
   if (dbToken.status === "verbraucht") {
-    // Bereits abgestimmt – vorherige Entscheidung anzeigen
     const { data: existingVote } = await supabase
       .from("cost_request_votes")
       .select("decision, voted_at")
@@ -99,7 +103,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Prüfen ob Antrag bereits entschieden
   if (costRequest.status !== "offen") {
     return NextResponse.json({
       valid: false,
@@ -107,7 +110,6 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  // Bisherige Stimmen laden
   const { data: votes } = await supabase
     .from("cost_request_votes")
     .select("approval_role, decision, voted_at")
@@ -120,6 +122,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     valid: true,
     approverRole: dbToken.approval_role,
+    // Vom Token gebundene Absicht — die Abstimmungsseite wählt sie vor.
+    intent: tokenData.intent,
     costRequest: {
       id: costRequest.id,
       applicantName: `${costRequest.applicant_first_name} ${costRequest.applicant_last_name}`,
@@ -141,6 +145,23 @@ export async function GET(request: NextRequest) {
  * Stimme abgeben (token-basiert, kein Login).
  */
 export async function POST(request: NextRequest) {
+  // Rate-Limiting (BUG-5)
+  const headersList = await headers()
+  const ip = headersList.get("x-forwarded-for")?.split(",")[0] ?? "unknown"
+
+  const limited = await isRateLimited(
+    `cost-requests-vote:${ip}`,
+    VOTE_RATE_LIMIT_MAX,
+    VOTE_RATE_LIMIT_WINDOW_SECONDS
+  )
+
+  if (limited) {
+    return NextResponse.json(
+      { error: "Zu viele Abstimmungsversuche. Bitte versuchen Sie es später erneut." },
+      { status: 429 }
+    )
+  }
+
   let body: unknown
   try {
     body = await request.json()
@@ -161,7 +182,7 @@ export async function POST(request: NextRequest) {
 
   const { token, decision } = parsed.data
 
-  // Token kryptographisch prüfen
+  // Token kryptographisch prüfen (enthält intent)
   const tokenData = verifyVoteToken(token)
   if (!tokenData) {
     return NextResponse.json(
@@ -170,14 +191,24 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const supabase = createAdminSupabaseClient()
-  const tokenHashValue = hashToken(token)
+  // BUG-1: Intent aus Token MUSS mit übermittelter Entscheidung übereinstimmen.
+  // Verhindert, dass der Approve-Link zum Ablehnen verwendet wird (oder umgekehrt).
+  if (tokenData.intent !== decision) {
+    return NextResponse.json(
+      { error: "Der verwendete Link passt nicht zur gewählten Entscheidung." },
+      { status: 400 }
+    )
+  }
 
-  // Token in DB prüfen
+  const supabase = createAdminSupabaseClient()
+
+  // DB-Zeile über (request_id, role) suchen statt über den Token-Hash,
+  // damit Approve- und Reject-Token dieselbe Zeile referenzieren.
   const { data: dbToken, error: tokenError } = await supabase
     .from("cost_request_tokens")
     .select("id, status, cost_request_id, approval_role")
-    .eq("token_hash", tokenHashValue)
+    .eq("cost_request_id", tokenData.requestId)
+    .eq("approval_role", tokenData.approvalRole)
     .single()
 
   if (tokenError || !dbToken) {
@@ -252,9 +283,12 @@ export async function POST(request: NextRequest) {
       {
         label: a.label,
         email: (() => {
-        const profiles = a.user_profiles as unknown as { email: string }[] | { email: string } | null
-        return Array.isArray(profiles) ? profiles[0]?.email || "" : profiles?.email || ""
-      })(),
+          const profiles = a.user_profiles as unknown as
+            | { email: string }[]
+            | { email: string }
+            | null
+          return Array.isArray(profiles) ? profiles[0]?.email || "" : profiles?.email || ""
+        })(),
       },
     ])
   )
@@ -268,7 +302,6 @@ export async function POST(request: NextRequest) {
   if (majorityReached) {
     finalDecision = approvedCount >= 2 ? "genehmigt" : "abgelehnt"
 
-    // Antrag-Status aktualisieren
     await supabase
       .from("cost_requests")
       .update({
@@ -277,15 +310,13 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", dbToken.cost_request_id)
 
-    // Verbleibende Tokens ungültig machen
     await supabase
       .from("cost_request_tokens")
       .update({ status: "verbraucht" })
       .eq("cost_request_id", dbToken.cost_request_id)
       .eq("status", "aktiv")
 
-    // Abschluss-E-Mails an alle Genehmiger
-    for (const [role, info] of approverMap) {
+    for (const [, info] of approverMap) {
       if (info.email) {
         await sendFinalDecisionToApprover({
           recipientEmail: info.email,
@@ -299,7 +330,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Ergebnis-E-Mail an Antragsteller
     await sendDecisionToApplicant({
       applicantEmail: costRequest.applicant_email,
       applicantName,
@@ -309,7 +339,6 @@ export async function POST(request: NextRequest) {
       votes: votes.map((v) => ({ role: v.approval_role, decision: v.decision })),
     })
   } else {
-    // Benachrichtigungs-E-Mails an die anderen Genehmiger
     const voterLabel = approverMap.get(dbToken.approval_role)?.label || dbToken.approval_role
 
     for (const [role, info] of approverMap) {

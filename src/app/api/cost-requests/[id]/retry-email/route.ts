@@ -68,12 +68,12 @@ export async function POST(
 
   const votedRoles = new Set((existingVotes || []).map((v) => v.approval_role))
 
-  // Alte aktive Tokens löschen (werden durch neue ersetzt)
+  // Alte Tokens löschen (UNIQUE-Constraint auf (cost_request_id, approval_role)
+  // verhindert ein INSERT, wenn nur der Status auf "abgelaufen" gesetzt würde)
   await supabase
     .from("cost_request_tokens")
-    .update({ status: "abgelaufen" })
+    .delete()
     .eq("cost_request_id", requestId)
-    .eq("status", "aktiv")
 
   // Neue Tokens nur für Genehmiger erzeugen, die noch nicht abgestimmt haben
   let allEmailsSent = true
@@ -91,9 +91,17 @@ export async function POST(
       continue
     }
 
+    // Zwei separate Tokens: approve und reject. Der intent ist in der
+    // HMAC-Signatur verankert und wird beim Voten geprüft.
     const { token: approveToken, tokenHash, expiresAt } = generateVoteToken(
       requestId,
-      approver.approval_role
+      approver.approval_role,
+      "genehmigt"
+    )
+    const { token: rejectToken } = generateVoteToken(
+      requestId,
+      approver.approval_role,
+      "abgelehnt"
     )
 
     const { error: tokenError } = await supabase
@@ -120,7 +128,7 @@ export async function POST(
       purpose: costRequest.purpose,
       createdAt: costRequest.created_at,
       approveToken,
-      rejectToken: approveToken,
+      rejectToken,
     })
 
     if (!result.success) {

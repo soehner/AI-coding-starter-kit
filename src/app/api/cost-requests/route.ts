@@ -4,24 +4,11 @@ import { requireAdmin } from "@/lib/admin-auth"
 import { createCostRequestSchema } from "@/lib/validations/cost-request"
 import { generateVoteToken } from "@/lib/cost-request-token"
 import { sendApprovalRequestEmail } from "@/lib/cost-request-emails"
+import { isRateLimited } from "@/lib/rate-limit"
 import { headers } from "next/headers"
 
-const RATE_LIMIT_WINDOW = 3600_000 // 1 Stunde
+const RATE_LIMIT_WINDOW_SECONDS = 3600 // 1 Stunde
 const RATE_LIMIT_MAX = 3
-const requestCounts = new Map<string, { count: number; resetAt: number }>()
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now()
-  const entry = requestCounts.get(ip)
-
-  if (!entry || now > entry.resetAt) {
-    requestCounts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW })
-    return false
-  }
-
-  entry.count++
-  return entry.count > RATE_LIMIT_MAX
-}
 
 /**
  * GET /api/cost-requests
@@ -64,11 +51,17 @@ export async function GET() {
  * Öffentliche Route: Kostenübernahme-Antrag einreichen.
  */
 export async function POST(request: NextRequest) {
-  // Rate-Limiting
+  // Rate-Limiting (DB-basiert, serverless-sicher)
   const headersList = await headers()
   const ip = headersList.get("x-forwarded-for")?.split(",")[0] ?? "unknown"
 
-  if (isRateLimited(ip)) {
+  const limited = await isRateLimited(
+    `cost-requests-submit:${ip}`,
+    RATE_LIMIT_MAX,
+    RATE_LIMIT_WINDOW_SECONDS
+  )
+
+  if (limited) {
     return NextResponse.json(
       { error: "Zu viele Anträge. Bitte versuchen Sie es später erneut." },
       { status: 429 }
@@ -141,20 +134,35 @@ export async function POST(request: NextRequest) {
   let allEmailsSent = true
 
   for (const approver of approvers) {
-    const profiles = approver.user_profiles as unknown as { email: string }[] | { email: string } | null
-    const approverEmail = Array.isArray(profiles) ? profiles[0]?.email : profiles?.email
+    const profiles = approver.user_profiles as unknown as
+      | { email: string }[]
+      | { email: string }
+      | null
+    const approverEmail = Array.isArray(profiles)
+      ? profiles[0]?.email
+      : profiles?.email
     if (!approverEmail) {
       allEmailsSent = false
       continue
     }
 
-    // Approve-Token und Reject-Token erzeugen (gleicher Genehmiger, aber getrennte Tokens)
+    // Zwei separate Tokens: einer für Genehmigen, einer für Ablehnen.
+    // Das intent ist in der HMAC-Signatur verankert und wird beim Voten geprüft.
     const { token: approveToken, tokenHash, expiresAt } = generateVoteToken(
       costRequest.id,
-      approver.approval_role
+      approver.approval_role,
+      "genehmigt"
+    )
+    const { token: rejectToken } = generateVoteToken(
+      costRequest.id,
+      approver.approval_role,
+      "abgelehnt"
     )
 
-    // Token in DB speichern
+    // EIN DB-Eintrag pro (request, role) als Statusmarker. Der gespeicherte
+    // Hash gehört zum Approve-Token (Audit-Zweck). Beide Tokens sind
+    // kryptographisch gültig, der DB-Lookup beim Voten erfolgt über
+    // (cost_request_id, approval_role).
     const { error: tokenError } = await supabase
       .from("cost_request_tokens")
       .insert({
@@ -171,7 +179,6 @@ export async function POST(request: NextRequest) {
       continue
     }
 
-    // E-Mail senden (Token wird sowohl für Genehmigen als auch Ablehnen verwendet)
     const result = await sendApprovalRequestEmail({
       recipientEmail: approverEmail,
       recipientLabel: approver.label,
@@ -180,7 +187,7 @@ export async function POST(request: NextRequest) {
       purpose: purpose.trim(),
       createdAt: costRequest.created_at,
       approveToken,
-      rejectToken: approveToken,
+      rejectToken,
     })
 
     if (!result.success) {

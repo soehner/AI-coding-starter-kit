@@ -26,9 +26,9 @@ function getFromEmail(): string {
 }
 
 function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_SITE_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "http://localhost:3000"
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  return "http://localhost:3000"
 }
 
 function formatAmount(cents: number): string {
@@ -75,6 +75,9 @@ export async function sendApprovalRequestEmail(
   const approveUrl = `${baseUrl}/abstimmung/${params.approveToken}?decision=genehmigt`
   const rejectUrl = `${baseUrl}/abstimmung/${params.rejectToken}?decision=abgelehnt`
 
+  const safeApplicantName = escapeHtml(params.applicantName)
+  const safeRecipientLabel = escapeHtml(params.recipientLabel)
+
   try {
     await resend.emails.send({
       from: getFromEmail(),
@@ -84,14 +87,14 @@ export async function sendApprovalRequestEmail(
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #1a1a1a;">Neuer Kostenübernahme-Antrag</h2>
 
-          <p>Hallo ${params.recipientLabel},</p>
+          <p>Hallo ${safeRecipientLabel},</p>
 
           <p>ein neuer Kostenübernahme-Antrag wurde eingereicht und wartet auf Ihre Entscheidung:</p>
 
           <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
             <tr style="border-bottom: 1px solid #e5e5e5;">
               <td style="padding: 8px 0; font-weight: bold; color: #666;">Antragsteller</td>
-              <td style="padding: 8px 0;">${params.applicantName}</td>
+              <td style="padding: 8px 0;">${safeApplicantName}</td>
             </tr>
             <tr style="border-bottom: 1px solid #e5e5e5;">
               <td style="padding: 8px 0; font-weight: bold; color: #666;">Betrag</td>
@@ -154,6 +157,9 @@ export async function sendVoteNotificationEmail(
   const resend = getResend()
 
   const decisionText = params.decision === "genehmigt" ? "genehmigt" : "abgelehnt"
+  const safeRecipientLabel = escapeHtml(params.recipientLabel)
+  const safeVoterLabel = escapeHtml(params.voterLabel)
+  const safeApplicantName = escapeHtml(params.applicantName)
 
   try {
     await resend.emails.send({
@@ -164,10 +170,10 @@ export async function sendVoteNotificationEmail(
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #1a1a1a;">Abstimmungs-Update</h2>
 
-          <p>Hallo ${params.recipientLabel},</p>
+          <p>Hallo ${safeRecipientLabel},</p>
 
-          <p><strong>${params.voterLabel}</strong> hat den Kostenübernahme-Antrag von
-          <strong>${params.applicantName}</strong> über <strong>${formatAmount(params.amount)}</strong>
+          <p><strong>${safeVoterLabel}</strong> hat den Kostenübernahme-Antrag von
+          <strong>${safeApplicantName}</strong> über <strong>${formatAmount(params.amount)}</strong>
           <strong style="color: ${params.decision === "genehmigt" ? "#16a34a" : "#dc2626"};">${decisionText}</strong>.</p>
 
           <p>Aktueller Stand: ${params.voteCount} von 3 Stimmen abgegeben.</p>
@@ -218,9 +224,9 @@ export async function sendFinalDecisionToApprover(
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <h2 style="color: #1a1a1a;">Entscheidung gefallen</h2>
 
-          <p>Hallo ${params.recipientLabel},</p>
+          <p>Hallo ${escapeHtml(params.recipientLabel)},</p>
 
-          <p>der Kostenübernahme-Antrag von <strong>${params.applicantName}</strong> über
+          <p>der Kostenübernahme-Antrag von <strong>${escapeHtml(params.applicantName)}</strong> über
           <strong>${formatAmount(params.amount)}</strong> wurde
           <strong style="color: ${params.finalDecision === "genehmigt" ? "#16a34a" : "#dc2626"};">
           ${params.finalDecision}</strong> (Mehrheitsentscheidung).</p>
