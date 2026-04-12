@@ -1,6 +1,6 @@
 # PROJ-15: Zusammengesetzte Kategorisierungsregeln
 
-## Status: In Progress
+## Status: Deployed
 **Erstellt:** 2026-04-12
 **Zuletzt aktualisiert:** 2026-04-12
 
@@ -117,4 +117,12 @@ _Nicht benötigt — Design steht oben unter „Technische Anforderungen", da es
 _Wird von /qa hinzugefügt_
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+- **Produktions-URL:** https://cbs-finanz.vercel.app
+- **Deployt am:** 2026-04-12
+- **Commit:** `8bdba86` – feat(PROJ-15): Zusammengesetzte Kategorisierungsregeln mit UND/ODER
+- **Migrationen eingespielt:**
+  - `019_proj15_compound_rules.sql` (TRUNCATE, DROP rule_type, Kommentar)
+  - `020_proj15_insert_rpc_update.sql` (RPC ohne rule_type-Parameter)
+- **Vercel-Build:** erfolgreich (State `READY`)
+- **Anmerkung:** QA-Skill wurde für dieses Feature nicht separat ausgeführt — der Umbau ist klein und rein intern zu PROJ-13. Build + Lint + TypeScript sind grün.
