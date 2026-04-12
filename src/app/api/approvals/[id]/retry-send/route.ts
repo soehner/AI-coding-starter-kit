@@ -107,13 +107,6 @@ export async function POST(
         ? [{ url: request.document_url, name: request.document_name }]
         : []
 
-  if (documents.length === 0) {
-    return NextResponse.json(
-      { error: "Der Antrag enthält keine Belege." },
-      { status: 400 }
-    )
-  }
-
   let result: { sent: number; failed: number }
   try {
     result = await issueTokensAndSendEmails(adminClient, {

@@ -113,11 +113,6 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
   }
 
   async function onSubmit(values: ApprovalRequestInput) {
-    if (selectedFiles.length === 0) {
-      setFileError("Bitte mindestens einen Beleg hochladen.")
-      return
-    }
-
     setIsSubmitting(true)
     setError(null)
 
@@ -157,7 +152,7 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* Belege-Upload (Mehrfachauswahl) */}
         <div className="space-y-2">
-          <Label>Belege *</Label>
+          <Label>Belege (optional)</Label>
           <Card>
             <CardContent className="p-4 space-y-3">
               {selectedFiles.length > 0 && (

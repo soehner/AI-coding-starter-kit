@@ -98,13 +98,6 @@ export async function POST(request: NextRequest) {
 
   const files = rawFiles.filter((f): f is File => f instanceof File && f.size > 0)
 
-  if (files.length === 0) {
-    return NextResponse.json(
-      { error: "Bitte mindestens einen Beleg hochladen." },
-      { status: 400 }
-    )
-  }
-
   if (files.length > MAX_FILES_PER_REQUEST) {
     return NextResponse.json(
       { error: `Maximal ${MAX_FILES_PER_REQUEST} Belege pro Antrag erlaubt.` },
@@ -169,86 +162,87 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 5. Seafile-Konfiguration laden
-  const seafileSetup = await loadSeafileConfig(adminClient, decrypt)
-  if (!seafileSetup) {
-    return NextResponse.json(
-      {
-        error:
-          "Seafile ist nicht konfiguriert. Bitte die Einstellungen im Admin-Bereich prüfen.",
-      },
-      { status: 500 }
-    )
-  }
-
-  // 6. Dateien in Buffer lesen, Magic-Bytes prüfen (BUG-7) und auf Seafile hochladen
-  const year = new Date().getFullYear().toString()
-  const basePath = "/Förderverein/Genehmigungen/"
-  const timestampPrefix = new Date().toISOString().split("T")[0]
-
+  // 5. + 6. Optional: Dateien auf Seafile hochladen (falls vorhanden)
   type UploadedDoc = { url: string; name: string; path: string }
   const uploaded: UploadedDoc[] = []
 
-  for (const file of files) {
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const detected = detectFileTypeFromBuffer(buffer)
-    if (detected.kind === "unknown" || !ALLOWED_MIME_TYPES.has(detected.mimeType)) {
+  if (files.length > 0) {
+    const seafileSetup = await loadSeafileConfig(adminClient, decrypt)
+    if (!seafileSetup) {
       return NextResponse.json(
         {
-          error: `Der Dateiinhalt von "${file.name}" entspricht keinem erlaubten Format (PDF, JPG, PNG, HEIC, DOC, DOCX).`,
+          error:
+            "Seafile ist nicht konfiguriert. Bitte die Einstellungen im Admin-Bereich prüfen.",
         },
-        { status: 400 }
+        { status: 500 }
       )
     }
 
-    const safeDocumentName = sanitizeDocumentName(file.name || "beleg")
-    const sanitized = sanitizeFileName(safeDocumentName)
-    const finalName = `${timestampPrefix}_${sanitized}`
+    const year = new Date().getFullYear().toString()
+    const basePath = "/Förderverein/Genehmigungen/"
+    const timestampPrefix = new Date().toISOString().split("T")[0]
 
-    try {
-      const upload = await uploadToSeafile(
-        seafileSetup.config,
-        basePath,
-        year,
-        finalName,
-        buffer,
-        detected.mimeType
-      )
-      if (!isValidDocumentUrl(upload.shareLink)) {
-        console.error("Ungültige Seafile-Share-URL:", upload.shareLink)
+    for (const file of files) {
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const detected = detectFileTypeFromBuffer(buffer)
+      if (detected.kind === "unknown" || !ALLOWED_MIME_TYPES.has(detected.mimeType)) {
         return NextResponse.json(
           {
-            error: "Seafile lieferte einen ungültigen Share-Link (nur https erlaubt).",
+            error: `Der Dateiinhalt von "${file.name}" entspricht keinem erlaubten Format (PDF, JPG, PNG, HEIC, DOC, DOCX).`,
+          },
+          { status: 400 }
+        )
+      }
+
+      const safeDocumentName = sanitizeDocumentName(file.name || "beleg")
+      const sanitized = sanitizeFileName(safeDocumentName)
+      const finalName = `${timestampPrefix}_${sanitized}`
+
+      try {
+        const upload = await uploadToSeafile(
+          seafileSetup.config,
+          basePath,
+          year,
+          finalName,
+          buffer,
+          detected.mimeType
+        )
+        if (!isValidDocumentUrl(upload.shareLink)) {
+          console.error("Ungültige Seafile-Share-URL:", upload.shareLink)
+          return NextResponse.json(
+            {
+              error: "Seafile lieferte einen ungültigen Share-Link (nur https erlaubt).",
+            },
+            { status: 502 }
+          )
+        }
+        uploaded.push({
+          url: upload.shareLink,
+          name: safeDocumentName,
+          path: upload.filePath,
+        })
+      } catch (err) {
+        console.error("Seafile-Upload fehlgeschlagen:", err)
+        return NextResponse.json(
+          {
+            error: `Beleg "${file.name}" konnte nicht auf Seafile hochgeladen werden. Bitte später erneut versuchen.`,
           },
           { status: 502 }
         )
       }
-      uploaded.push({
-        url: upload.shareLink,
-        name: safeDocumentName,
-        path: upload.filePath,
-      })
-    } catch (err) {
-      console.error("Seafile-Upload fehlgeschlagen:", err)
-      return NextResponse.json(
-        {
-          error: `Beleg "${file.name}" konnte nicht auf Seafile hochgeladen werden. Bitte später erneut versuchen.`,
-        },
-        { status: 502 }
-      )
     }
   }
 
-  // 7. Antrag in DB speichern (document_url/name/path = erster Beleg für Kompatibilität)
-  const primaryDoc = uploaded[0]
+  // 7. Antrag in DB speichern (document_url/name/path = erster Beleg, falls vorhanden)
+  const primaryDoc = uploaded[0] ?? null
   const { data: inserted, error: insertError } = await adminClient
     .from("approval_requests")
     .insert({
       created_by: adminProfile.id,
       note: validNote,
-      document_url: primaryDoc.url,
-      document_name: primaryDoc.name,
-      document_path: primaryDoc.path,
+      document_url: primaryDoc?.url ?? null,
+      document_name: primaryDoc?.name ?? null,
+      document_path: primaryDoc?.path ?? null,
       required_roles: requiredRoles,
       link_type,
       status: "offen",
@@ -264,27 +258,29 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 7b. Alle Dokumente in approval_documents speichern
-  const documentRows = uploaded.map((doc, index) => ({
-    request_id: inserted.id,
-    document_url: doc.url,
-    document_name: doc.name,
-    document_path: doc.path,
-    display_order: index,
-  }))
+  // 7b. Alle Dokumente in approval_documents speichern (falls vorhanden)
+  if (uploaded.length > 0) {
+    const documentRows = uploaded.map((doc, index) => ({
+      request_id: inserted.id,
+      document_url: doc.url,
+      document_name: doc.name,
+      document_path: doc.path,
+      display_order: index,
+    }))
 
-  const { error: docsInsertError } = await adminClient
-    .from("approval_documents")
-    .insert(documentRows)
+    const { error: docsInsertError } = await adminClient
+      .from("approval_documents")
+      .insert(documentRows)
 
-  if (docsInsertError) {
-    console.error("Dokumente-Insert-Fehler:", docsInsertError)
-    // Antrag wieder löschen, weil Belege inkonsistent wären
-    await adminClient.from("approval_requests").delete().eq("id", inserted.id)
-    return NextResponse.json(
-      { error: "Belege konnten nicht gespeichert werden." },
-      { status: 500 }
-    )
+    if (docsInsertError) {
+      console.error("Dokumente-Insert-Fehler:", docsInsertError)
+      // Antrag wieder löschen, weil Belege inkonsistent wären
+      await adminClient.from("approval_requests").delete().eq("id", inserted.id)
+      return NextResponse.json(
+        { error: "Belege konnten nicht gespeichert werden." },
+        { status: 500 }
+      )
+    }
   }
 
   // 9. Tokens generieren + E-Mails versenden

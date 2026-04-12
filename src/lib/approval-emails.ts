@@ -96,13 +96,22 @@ export async function sendApprovalRequestEmail(
   const approveHref = safeHref(`${params.decisionUrl}?aktion=genehmigen`)
   const rejectHref = safeHref(`${params.decisionUrl}?aktion=ablehnen`)
 
-  const docsListHtml = params.documents
-    .map(
-      (doc) =>
-        `<li style="margin: 2px 0;"><a href="${safeHref(doc.url)}" style="color: #2563eb;" target="_blank" rel="noopener noreferrer">${escapeHtml(doc.name)}</a></li>`
-    )
-    .join("")
   const belegLabel = params.documents.length > 1 ? "Belege" : "Beleg"
+  const docsRowHtml =
+    params.documents.length === 0
+      ? ""
+      : `
+            <tr>
+              <td style="padding: 8px 0; font-weight: bold; color: #666; vertical-align: top;">${belegLabel}</td>
+              <td style="padding: 8px 0;">
+                <ul style="margin: 0; padding-left: 18px;">${params.documents
+                  .map(
+                    (doc) =>
+                      `<li style="margin: 2px 0;"><a href="${safeHref(doc.url)}" style="color: #2563eb;" target="_blank" rel="noopener noreferrer">${escapeHtml(doc.name)}</a></li>`
+                  )
+                  .join("")}</ul>
+              </td>
+            </tr>`
 
   try {
     const { error: sendError } = await resend.emails.send({
@@ -130,12 +139,7 @@ export async function sendApprovalRequestEmail(
               <td style="padding: 8px 0; font-weight: bold; color: #666; vertical-align: top;">Bemerkung</td>
               <td style="padding: 8px 0;">${safeNote}</td>
             </tr>
-            <tr>
-              <td style="padding: 8px 0; font-weight: bold; color: #666; vertical-align: top;">${belegLabel}</td>
-              <td style="padding: 8px 0;">
-                <ul style="margin: 0; padding-left: 18px;">${docsListHtml}</ul>
-              </td>
-            </tr>
+            ${docsRowHtml}
           </table>
 
           <p style="margin: 24px 0 8px;">Bitte triff deine Entscheidung:</p>
