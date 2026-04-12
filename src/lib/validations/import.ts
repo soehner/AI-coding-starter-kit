@@ -47,6 +47,7 @@ export const confirmImportSchema = z.object({
           .string()
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Wertstellungsdatum muss im Format YYYY-MM-DD sein."),
         description: z.string().min(1, "Buchungstext ist erforderlich."),
+        counterpart: z.string().max(300).nullable().optional(),
         amount: z.number(),
         balance_after: z.number(),
       })

@@ -24,6 +24,13 @@ export interface ParsedTransaction {
   booking_date: string
   value_date: string
   description: string
+  /**
+   * PROJ-13 BUG-002: Name des Auftraggebers/Empfängers (vom KI-Parser
+   * separat extrahiert). Wird für Regeln vom Typ `counterpart_contains`
+   * verwendet. Kann fehlen, wenn das Parser-Modell den Namen nicht
+   * zuverlässig bestimmen konnte.
+   */
+  counterpart?: string | null
   amount: number
   balance_after: number
   isDuplicate?: boolean
@@ -120,6 +127,8 @@ export interface Transaction {
   booking_date: string
   value_date: string
   description: string
+  /** PROJ-13 BUG-002: Name des Auftraggebers/Empfängers, separat vom Verwendungszweck. */
+  counterpart?: string | null
   amount: number
   balance_after: number
   category: string | null

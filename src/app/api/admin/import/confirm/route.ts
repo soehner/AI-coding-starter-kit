@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requirePermission } from "@/lib/require-permission"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { confirmImportSchema } from "@/lib/validations/import"
+import { applyCategorizationRules } from "@/lib/categorization-rules"
 
 /**
  * POST /api/admin/import/confirm
@@ -97,13 +98,15 @@ export async function POST(request: Request) {
     booking_date: tx.booking_date,
     value_date: tx.value_date,
     description: tx.description,
+    counterpart: tx.counterpart ?? null,
     amount: tx.amount,
     balance_after: tx.balance_after,
   }))
 
-  const { error: txError } = await adminClient
+  const { data: insertedTxs, error: txError } = await adminClient
     .from("transactions")
     .insert(transactionRows)
+    .select("id")
 
   if (txError) {
     console.error(
@@ -125,11 +128,35 @@ export async function POST(request: Request) {
     )
   }
 
+  // PROJ-13: Automatische Kategorisierung der frisch importierten Buchungen.
+  // Fehler in der Regelanwendung dürfen den erfolgreichen Import NICHT rückgängig
+  // machen – sie werden geloggt und als Warnung zurückgegeben.
+  let autoCategorized = 0
+  let autoAssignments = 0
+  let rulesWarning: string | null = null
+  const newTxIds = (insertedTxs ?? []).map((row) => row.id as string)
+  if (newTxIds.length > 0) {
+    try {
+      const result = await applyCategorizationRules(adminClient, newTxIds)
+      autoCategorized = result.categorized
+      autoAssignments = result.assignmentsCreated
+    } catch (err) {
+      console.error("Fehler bei automatischer Kategorisierung:", err)
+      rulesWarning =
+        err instanceof Error
+          ? err.message
+          : "Regeln konnten nicht angewendet werden."
+    }
+  }
+
   return NextResponse.json(
     {
       message: `${transactions.length} Buchungen erfolgreich gespeichert.`,
       statement_id: statement.id,
       transaction_count: transactions.length,
+      auto_categorized: autoCategorized,
+      auto_assignments: autoAssignments,
+      rules_warning: rulesWarning,
     },
     { status: 201 }
   )

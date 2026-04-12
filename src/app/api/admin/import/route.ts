@@ -5,6 +5,10 @@ import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { decrypt } from "@/lib/encryption"
 import { parseBankStatement } from "@/lib/ki-parser"
 import { loadSeafileConfig, uploadToSeafile, sanitizeFileName } from "@/lib/seafile"
+import {
+  loadActiveCategorizationRules,
+  matchRulesForTransaction,
+} from "@/lib/categorization-rules"
 import type { KiProvider } from "@/lib/types"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB serverseitiges Limit
@@ -187,11 +191,40 @@ export async function POST(request: Request) {
     }))
   }
 
-  // 9. Datei-Informationen zur Antwort hinzufügen
+  // 9. PROJ-13: Aktive Kategorisierungsregeln auf die geparsten Buchungen
+  //    anwenden, damit der Admin in der Vorschau schon sieht, welche
+  //    Kategorien beim Bestätigen automatisch vergeben werden. Fehler hier
+  //    brechen den Import NICHT ab – die Vorschau bleibt dann ohne
+  //    Vorschläge.
+  let rulesWarning: string | undefined
+  try {
+    const activeRules = await loadActiveCategorizationRules(adminClient)
+    if (activeRules.length > 0) {
+      result.transactions = result.transactions.map((tx) => {
+        const autoIds = matchRulesForTransaction(
+          {
+            description: tx.description,
+            counterpart: tx.counterpart ?? null,
+            amount: tx.amount,
+            booking_date: tx.booking_date,
+          },
+          activeRules
+        )
+        return autoIds.length > 0 ? { ...tx, auto_category_ids: autoIds } : tx
+      })
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    console.error("Regel-Vorschau-Fehler beim Import:", detail)
+    rulesWarning = `Automatische Kategorien konnten nicht vorberechnet werden: ${detail}`
+  }
+
+  // 10. Datei-Informationen zur Antwort hinzufügen
   return NextResponse.json({
     ...result,
     file_name: file.name,
     file_path: filePath,
     ...(seafileWarning ? { seafile_warning: seafileWarning } : {}),
+    ...(rulesWarning ? { rules_warning: rulesWarning } : {}),
   })
 }

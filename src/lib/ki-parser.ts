@@ -13,7 +13,8 @@ Regeln:
 - Saldo nach jeder Buchung angeben
 - Kontoauszugsnummer und -datum aus dem Header extrahieren
 - Anfangs- und Endsaldo extrahieren
-- Buchungstext vollständig übernehmen (inkl. Verwendungszweck, Empfänger, IBAN etc.)
+- Buchungstext ("description") vollständig übernehmen (inkl. Verwendungszweck, IBAN, Referenznummern etc.)
+- Name des Auftraggebers/Empfängers separat in "counterpart" extrahieren (z.B. "Stadtwerke Mannheim GmbH", "Max Mustermann"). Wenn kein eindeutiger Name erkennbar ist, "counterpart" auf null setzen.
 - Jede Buchung bekommt eine fortlaufende ID (tx-1, tx-2, ...)
 
 Antwort NUR als valides JSON im folgenden Format (keine Erklärung, kein Markdown):
@@ -27,7 +28,8 @@ Antwort NUR als valides JSON im folgenden Format (keine Erklärung, kein Markdow
       "id": "tx-1",
       "booking_date": "2026-01-02",
       "value_date": "2026-01-02",
-      "description": "SEPA-Lastschrift Stadtwerke Mannheim Strom Dez 2025 DE89370400440532013000",
+      "description": "SEPA-Lastschrift Strom Dez 2025 DE89370400440532013000",
+      "counterpart": "Stadtwerke Mannheim GmbH",
       "amount": -89.50,
       "balance_after": 12256.17
     }

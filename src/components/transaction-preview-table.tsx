@@ -33,6 +33,8 @@ import {
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CategoryBadge } from "@/components/category-badge"
+import { useCategories } from "@/hooks/use-categories"
 import type { ParsedStatementResult, ParsedTransaction } from "@/lib/types"
 
 interface TransactionPreviewTableProps {
@@ -101,8 +103,12 @@ export function TransactionPreviewTable({
   hideFooter = false,
   onTransactionsChange,
 }: TransactionPreviewTableProps) {
+  const categories = useCategories()
   const [transactions, setTransactions] = useState<ParsedTransaction[]>(
     result.transactions.map((t) => ({ ...t, isRemoved: false }))
+  )
+  const hasAutoCategories = transactions.some(
+    (t) => (t.auto_category_ids?.length ?? 0) > 0
   )
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editValues, setEditValues] = useState<{
@@ -293,6 +299,11 @@ export function TransactionPreviewTable({
                     Wertstellung
                   </TableHead>
                   <TableHead>Buchungstext</TableHead>
+                  {hasAutoCategories && (
+                    <TableHead className="w-[180px] hidden lg:table-cell">
+                      Autom. Kategorien
+                    </TableHead>
+                  )}
                   <TableHead className="w-[120px] text-right">Betrag</TableHead>
                   <TableHead className="w-[120px] text-right hidden md:table-cell">
                     Saldo
@@ -308,7 +319,10 @@ export function TransactionPreviewTable({
                         key={tx.id}
                         className="opacity-40 line-through"
                       >
-                        <TableCell colSpan={5} className="text-muted-foreground">
+                        <TableCell
+                          colSpan={hasAutoCategories ? 6 : 5}
+                          className="text-muted-foreground"
+                        >
                           {formatDate(tx.booking_date)} - {tx.description} -{" "}
                           {formatCurrency(tx.amount)}
                         </TableCell>
@@ -423,6 +437,23 @@ export function TransactionPreviewTable({
                           </div>
                         )}
                       </TableCell>
+                      {hasAutoCategories && (
+                        <TableCell className="hidden lg:table-cell">
+                          <div className="flex flex-wrap gap-1">
+                            {(tx.auto_category_ids ?? [])
+                              .map((id) => categories.find((c) => c.id === id))
+                              .filter((c): c is NonNullable<typeof c> => !!c)
+                              .map((c) => (
+                                <CategoryBadge key={c.id} category={c} />
+                              ))}
+                            {(tx.auto_category_ids?.length ?? 0) === 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
                       <TableCell className="text-right font-mono">
                         {isEditing ? (
                           <Input
