@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -135,7 +136,7 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         {/* Beleg-Upload */}
         <div className="space-y-2">
-          <FormLabel>Beleg *</FormLabel>
+          <Label>Beleg *</Label>
           <Card>
             <CardContent className="p-4">
               {selectedFile ? (
