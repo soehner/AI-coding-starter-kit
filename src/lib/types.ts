@@ -38,6 +38,8 @@ export interface ParsedStatementResult {
   end_balance: number
   file_name?: string
   file_path?: string
+  /** Falls der Seafile-Upload fehlgeschlagen ist: Klartext-Grund für das UI. */
+  seafile_warning?: string
 }
 
 export interface BankStatement {

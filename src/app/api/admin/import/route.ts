@@ -118,9 +118,11 @@ export async function POST(request: Request) {
 
       filePath = uploadResult.shareLink
     } catch (err) {
-      console.error("Seafile-Upload-Fehler beim Import:", err)
-      // Fallback: Pfad als Warnung, Import geht weiter
-      seafileWarning = "Kontoauszug konnte nicht auf Seafile abgelegt werden."
+      const detail = err instanceof Error ? err.message : String(err)
+      console.error("Seafile-Upload-Fehler beim Import:", detail)
+      // Fallback: Pfad als Warnung, Import geht weiter — Fehler im Warning-Feld
+      // durchreichen, damit der Kassenwart im UI sieht, woran es liegt.
+      seafileWarning = `Kontoauszug konnte nicht auf Seafile abgelegt werden: ${detail}`
       filePath = `seafile_error:${file.name}`
     }
   } else {

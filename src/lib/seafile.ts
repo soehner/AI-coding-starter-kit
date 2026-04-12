@@ -59,18 +59,19 @@ export async function testSeafileConnection(
 }
 
 /**
- * Erstellt ein Verzeichnis in der Seafile-Bibliothek (rekursiv).
- * Existiert das Verzeichnis bereits, passiert nichts.
+ * Legt ein einzelnes Verzeichnis in Seafile an.
+ * 200/201 = erstellt, 409 = existiert bereits (beides OK).
  */
-async function ensureDirectory(config: SeafileConfig, dirPath: string): Promise<void> {
-  const res = await fetch(
+async function createSingleDirectory(
+  config: SeafileConfig,
+  dirPath: string
+): Promise<void> {
+  const checkRes = await fetch(
     `${config.url}/api2/repos/${config.repoId}/dir/?p=${encodeURIComponent(dirPath)}`,
     { headers: { Authorization: `Token ${config.token}` } }
   )
+  if (checkRes.ok) return // existiert schon
 
-  if (res.ok) return // Verzeichnis existiert bereits
-
-  // Verzeichnis erstellen
   const createRes = await fetch(
     `${config.url}/api2/repos/${config.repoId}/dir/?p=${encodeURIComponent(dirPath)}`,
     {
@@ -84,7 +85,32 @@ async function ensureDirectory(config: SeafileConfig, dirPath: string): Promise<
   )
 
   if (!createRes.ok && createRes.status !== 409) {
-    throw new Error(`Verzeichnis "${dirPath}" konnte nicht erstellt werden: ${createRes.status}`)
+    const errorText = await createRes.text().catch(() => "")
+    throw new Error(
+      `Verzeichnis "${dirPath}" konnte nicht erstellt werden: ${createRes.status} ${errorText}`
+    )
+  }
+}
+
+/**
+ * Stellt sicher, dass ein Verzeichnis inklusive aller Zwischenverzeichnisse
+ * in der Seafile-Bibliothek existiert. Seafile legt keine Pfade rekursiv an,
+ * daher müssen wir jede Ebene einzeln anlegen.
+ *
+ * Beispiel: "/CBS-Finanz-Data/Kontoauszüge/2026" erzeugt (falls fehlend):
+ *   - /CBS-Finanz-Data
+ *   - /CBS-Finanz-Data/Kontoauszüge
+ *   - /CBS-Finanz-Data/Kontoauszüge/2026
+ */
+async function ensureDirectory(
+  config: SeafileConfig,
+  dirPath: string
+): Promise<void> {
+  const segments = dirPath.split("/").filter(Boolean)
+  let current = ""
+  for (const segment of segments) {
+    current += `/${segment}`
+    await createSingleDirectory(config, current)
   }
 }
 

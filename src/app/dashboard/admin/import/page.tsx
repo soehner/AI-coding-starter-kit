@@ -28,6 +28,7 @@ export default function AdminImportPage() {
   const [isLoadingStatements, setIsLoadingStatements] = useState(true)
   const [statementsError, setStatementsError] = useState<string | null>(null)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+  const [seafileWarning, setSeafileWarning] = useState<string | null>(null)
 
   // KI-Einstellungen prüfen
   const checkSettings = useCallback(async () => {
@@ -105,6 +106,7 @@ export default function AdminImportPage() {
   function handleParseComplete(result: ParsedStatementResult) {
     setParseResult(result)
     setSaveSuccess(null)
+    setSeafileWarning(result.seafile_warning ?? null)
   }
 
   async function handleConfirm(transactions: ParsedTransaction[]) {
@@ -158,6 +160,15 @@ export default function AdminImportPage() {
         <Alert className="mb-6">
           <CheckCircle2 className="h-4 w-4" />
           <AlertDescription>{saveSuccess}</AlertDescription>
+        </Alert>
+      )}
+
+      {seafileWarning && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Seafile-Upload fehlgeschlagen:</strong> {seafileWarning}
+          </AlertDescription>
         </Alert>
       )}
 
