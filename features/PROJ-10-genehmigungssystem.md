@@ -1,8 +1,13 @@
 # PROJ-10: Genehmigungssystem für Vereinsanträge
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
 **Zuletzt aktualisiert:** 2026-04-12
+
+## Deployment
+**Produktions-URL:** https://cbs-finanz.vercel.app/dashboard/admin/genehmigungen
+**Deployt:** 2026-04-12
+**Git-Tag:** v1.10.0-PROJ-10
 
 ## Abhängigkeiten
 - Benötigt: PROJ-1 (Authentifizierung) – Login und Rollen müssen existieren
