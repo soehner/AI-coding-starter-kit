@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -37,8 +37,20 @@ import type { ParsedStatementResult, ParsedTransaction } from "@/lib/types"
 
 interface TransactionPreviewTableProps {
   result: ParsedStatementResult
-  onConfirm: (transactions: ParsedTransaction[]) => Promise<void>
-  onCancel: () => void
+  onConfirm?: (transactions: ParsedTransaction[]) => Promise<void>
+  onCancel?: () => void
+  /**
+   * Blendet den Footer (Abbrechen/Speichern-Buttons) aus. Wird vom Batch-Flow
+   * genutzt, damit eine übergeordnete Komponente den globalen Speichern-Button
+   * rendern kann.
+   */
+  hideFooter?: boolean
+  /**
+   * Meldet die aktuelle, aktive Transaktionsliste (ohne entfernte) nach oben.
+   * Wird vom Batch-Flow genutzt, um beim globalen Speichern die aktuellen
+   * Werte aller Vorschauen einzusammeln.
+   */
+  onTransactionsChange?: (transactions: ParsedTransaction[]) => void
 }
 
 function formatCurrency(amount: number): string {
@@ -61,6 +73,8 @@ export function TransactionPreviewTable({
   result,
   onConfirm,
   onCancel,
+  hideFooter = false,
+  onTransactionsChange,
 }: TransactionPreviewTableProps) {
   const [transactions, setTransactions] = useState<ParsedTransaction[]>(
     result.transactions.map((t) => ({ ...t, isRemoved: false }))
@@ -75,6 +89,14 @@ export function TransactionPreviewTable({
 
   const activeTransactions = transactions.filter((t) => !t.isRemoved)
   const duplicateCount = activeTransactions.filter((t) => t.isDuplicate).length
+
+  // Bei jeder Änderung an den aktiven Transaktionen nach oben melden,
+  // damit ein übergeordneter Batch-Flow beim globalen Speichern die
+  // aktuellen Werte parat hat.
+  useEffect(() => {
+    onTransactionsChange?.(activeTransactions)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions])
 
   const startEdit = useCallback((tx: ParsedTransaction) => {
     setEditingId(tx.id)
@@ -117,6 +139,7 @@ export function TransactionPreviewTable({
   }, [])
 
   async function handleConfirm() {
+    if (!onConfirm) return
     setIsSaving(true)
     setError(null)
 
@@ -348,28 +371,30 @@ export function TransactionPreviewTable({
         )}
       </CardContent>
 
-      <CardFooter className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-        <Button
-          variant="outline"
-          onClick={onCancel}
-          disabled={isSaving}
-          aria-label="Import abbrechen"
-        >
-          Abbrechen
-        </Button>
-        <Button
-          onClick={handleConfirm}
-          disabled={isSaving || activeTransactions.length === 0}
-          aria-label="Buchungen speichern"
-        >
-          {isSaving ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-2 h-4 w-4" />
-          )}
-          {activeTransactions.length} Buchungen speichern
-        </Button>
-      </CardFooter>
+      {!hideFooter && (
+        <CardFooter className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            disabled={isSaving}
+            aria-label="Import abbrechen"
+          >
+            Abbrechen
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={isSaving || activeTransactions.length === 0}
+            aria-label="Buchungen speichern"
+          >
+            {isSaving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            {activeTransactions.length} Buchungen speichern
+          </Button>
+        </CardFooter>
+      )}
     </Card>
   )
 }

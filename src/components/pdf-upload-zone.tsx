@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useRef, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
@@ -10,9 +9,7 @@ import {
   AlertCircle,
   FileUp,
   Loader2,
-  Upload,
   CheckCircle2,
-  X,
   FileText,
 } from "lucide-react"
 import type { ParsedStatementResult } from "@/lib/types"
@@ -21,12 +18,15 @@ type UploadStep = "idle" | "uploading" | "parsing" | "done" | "error"
 
 interface PdfUploadZoneProps {
   hasApiToken: boolean
-  /** Wird aufgerufen, wenn die API-Antwort für eine Datei vorliegt. */
-  onParseComplete: (result: ParsedStatementResult, fileName: string) => void
   /**
-   * true, solange oberhalb die Transaktions-Vorschau angezeigt wird.
-   * Während der Vorschau pausiert die Queue — sobald der User bestätigt
-   * oder abbricht, geht es mit der nächsten Datei weiter.
+   * Wird aufgerufen, wenn alle ausgewählten PDFs erfolgreich geparst wurden.
+   * Der Caller zeigt dann eine gemeinsame Vorschau aller Kontoauszüge.
+   */
+  onAllParsed: (results: ParsedStatementResult[]) => void
+  /**
+   * true, solange oberhalb die Vorschau angezeigt wird.
+   * Dann ist die Drop-Zone deaktiviert, um versehentliche Uploads
+   * während der Vorschau zu verhindern.
    */
   isPreviewActive: boolean
 }
@@ -35,7 +35,7 @@ const STEP_LABELS: Record<UploadStep, string> = {
   idle: "",
   uploading: "PDF wird hochgeladen...",
   parsing: "KI parst den Kontoauszug...",
-  done: "Parsing abgeschlossen",
+  done: "Alle Kontoauszüge verarbeitet",
   error: "Fehler aufgetreten",
 }
 
@@ -49,29 +49,16 @@ const STEP_PROGRESS: Record<UploadStep, number> = {
 
 export function PdfUploadZone({
   hasApiToken,
-  onParseComplete,
+  onAllParsed,
   isPreviewActive,
 }: PdfUploadZoneProps) {
   const [step, setStep] = useState<UploadStep>("idle")
   const [error, setError] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
-  const [queue, setQueue] = useState<File[]>([])
   const [currentFile, setCurrentFile] = useState<File | null>(null)
   const [totalCount, setTotalCount] = useState(0)
   const [doneCount, setDoneCount] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const resetState = useCallback(() => {
-    setStep("idle")
-    setError(null)
-    setQueue([])
-    setCurrentFile(null)
-    setTotalCount(0)
-    setDoneCount(0)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
-  }, [])
 
   const validateFile = useCallback((file: File): string | null => {
     if (file.type !== "application/pdf") {
@@ -83,57 +70,57 @@ export function PdfUploadZone({
     return null
   }, [])
 
-  const parseSingleFile = useCallback(
-    async (file: File) => {
+  const processQueue = useCallback(
+    async (files: File[]) => {
       setError(null)
-      setCurrentFile(file)
-      setStep("uploading")
+      setTotalCount(files.length)
+      setDoneCount(0)
 
-      try {
-        const formData = new FormData()
-        formData.append("file", file)
+      const results: ParsedStatementResult[] = []
 
-        setStep("parsing")
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setCurrentFile(file)
+        setDoneCount(i + 1)
+        setStep("uploading")
 
-        const response = await fetch("/api/admin/import", {
-          method: "POST",
-          body: formData,
-        })
+        try {
+          const formData = new FormData()
+          formData.append("file", file)
 
-        const data = await response.json()
+          setStep("parsing")
 
-        if (!response.ok) {
+          const response = await fetch("/api/admin/import", {
+            method: "POST",
+            body: formData,
+          })
+
+          const data = await response.json()
+
+          if (!response.ok) {
+            setStep("error")
+            setError(
+              `"${file.name}": ${data.error || "Fehler beim Verarbeiten der PDF-Datei."}`
+            )
+            return
+          }
+
+          results.push(data as ParsedStatementResult)
+        } catch {
           setStep("error")
           setError(
-            `"${file.name}": ${data.error || "Fehler beim Verarbeiten der PDF-Datei."}`
+            `"${file.name}": Netzwerkfehler beim Hochladen. Bitte erneut versuchen.`
           )
           return
         }
-
-        setStep("done")
-        onParseComplete(data as ParsedStatementResult, file.name)
-      } catch {
-        setStep("error")
-        setError(
-          `"${file.name}": Netzwerkfehler beim Hochladen. Bitte erneut versuchen.`
-        )
       }
+
+      setStep("done")
+      setCurrentFile(null)
+      onAllParsed(results)
     },
-    [onParseComplete]
+    [onAllParsed]
   )
-
-  // Sobald die Preview geschlossen wird (User hat bestätigt oder abgebrochen)
-  // und noch Dateien in der Queue warten: nächste Datei starten.
-  useEffect(() => {
-    if (isPreviewActive) return
-    if (step === "uploading" || step === "parsing") return
-    if (queue.length === 0) return
-
-    const next = queue[0]
-    setQueue((prev) => prev.slice(1))
-    setDoneCount((prev) => prev + 1)
-    parseSingleFile(next)
-  }, [isPreviewActive, queue, step, parseSingleFile])
 
   const addFiles = useCallback(
     (files: File[]) => {
@@ -150,18 +137,12 @@ export function PdfUploadZone({
       if (errors.length > 0) {
         setError(errors.join(" "))
         setStep("error")
+        return
       }
 
-      if (valid.length === 0) return
-
-      // Erste Datei direkt starten, Rest in die Queue
-      const [first, ...rest] = valid
-      setTotalCount((prev) => prev + valid.length)
-      setDoneCount((prev) => prev + 1)
-      setQueue((prev) => [...prev, ...rest])
-      parseSingleFile(first)
+      processQueue(valid)
     },
-    [validateFile, parseSingleFile]
+    [validateFile, processQueue]
   )
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
@@ -191,7 +172,7 @@ export function PdfUploadZone({
 
   const isProcessing = step === "uploading" || step === "parsing"
   const isDisabled = !hasApiToken || isProcessing || isPreviewActive
-  const hasQueue = queue.length > 0 || totalCount > 0
+  const showProgress = totalCount > 0 && step !== "idle"
 
   return (
     <div className="space-y-4">
@@ -267,7 +248,7 @@ export function PdfUploadZone({
           </div>
 
           {/* Queue-Status */}
-          {hasQueue && (
+          {showProgress && (
             <div className="mt-4 flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-muted-foreground" />
@@ -281,11 +262,6 @@ export function PdfUploadZone({
                   )}
                 </span>
               </div>
-              {queue.length > 0 && (
-                <span className="text-xs text-muted-foreground">
-                  {queue.length} in Warteschlange
-                </span>
-              )}
             </div>
           )}
 
@@ -310,21 +286,6 @@ export function PdfUploadZone({
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
-          )}
-
-          {/* Action-Buttons */}
-          {(hasQueue || step === "error") && (
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <Button
-                variant="outline"
-                onClick={resetState}
-                disabled={isProcessing}
-                aria-label="Warteschlange leeren und zurücksetzen"
-              >
-                <X className="mr-2 h-4 w-4" />
-                Warteschlange leeren
-              </Button>
-            </div>
           )}
         </CardContent>
       </Card>

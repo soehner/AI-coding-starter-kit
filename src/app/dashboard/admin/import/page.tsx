@@ -4,24 +4,23 @@ import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { PdfUploadZone } from "@/components/pdf-upload-zone"
-import { TransactionPreviewTable } from "@/components/transaction-preview-table"
+import {
+  MultiStatementPreview,
+  type StatementConfirmation,
+} from "@/components/multi-statement-preview"
 import { ImportedStatementsList } from "@/components/imported-statements-list"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, CheckCircle2 } from "lucide-react"
-import type {
-  BankStatement,
-  ParsedStatementResult,
-  ParsedTransaction,
-} from "@/lib/types"
+import type { BankStatement, ParsedStatementResult } from "@/lib/types"
 
 export default function AdminImportPage() {
-  const { user, profile, isLoading: authLoading, isAdmin, hasPermission } = useAuth()
+  const { user, profile, isLoading: authLoading, hasPermission } = useAuth()
   const router = useRouter()
 
   const [hasApiToken, setHasApiToken] = useState(false)
   const [isLoadingSettings, setIsLoadingSettings] = useState(true)
-  const [parseResult, setParseResult] = useState<ParsedStatementResult | null>(
+  const [parseResults, setParseResults] = useState<ParsedStatementResult[] | null>(
     null
   )
   const [statements, setStatements] = useState<BankStatement[]>([])
@@ -103,47 +102,65 @@ export default function AdminImportPage() {
     return null
   }
 
-  function handleParseComplete(result: ParsedStatementResult, _fileName: string) {
-    void _fileName
-    setParseResult(result)
+  function handleAllParsed(results: ParsedStatementResult[]) {
+    setParseResults(results)
     setSaveSuccess(null)
-    setSeafileWarning(result.seafile_warning ?? null)
+
+    // Falls einzelne Statements einen Seafile-Fehler hatten, gesammelt anzeigen
+    const warnings = results
+      .map((r) => r.seafile_warning)
+      .filter((w): w is string => !!w)
+    setSeafileWarning(warnings.length > 0 ? warnings.join(" | ") : null)
   }
 
-  async function handleConfirm(transactions: ParsedTransaction[]) {
-    const response = await fetch("/api/admin/import/confirm", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        statement_number: parseResult?.statement_number,
-        statement_date: parseResult?.statement_date,
-        file_name: parseResult?.file_name,
-        file_path: parseResult?.file_path,
-        start_balance: parseResult?.start_balance,
-        end_balance: parseResult?.end_balance,
-        transactions,
-      }),
-    })
+  async function handleConfirmAll(batch: StatementConfirmation[]) {
+    // Alle Statements sequenziell speichern. Bei einem Fehler stoppen und
+    // dem User den fehlgeschlagenen Kontoauszug nennen.
+    let savedStatements = 0
+    let savedTransactions = 0
 
-    const data = await response.json()
+    for (const { result, transactions } of batch) {
+      const response = await fetch("/api/admin/import/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          statement_number: result.statement_number,
+          statement_date: result.statement_date,
+          file_name: result.file_name,
+          file_path: result.file_path,
+          start_balance: result.start_balance,
+          end_balance: result.end_balance,
+          transactions,
+        }),
+      })
 
-    if (!response.ok) {
-      throw new Error(
-        data.error || "Fehler beim Speichern der Buchungen."
-      )
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(
+          `Kontoauszug ${result.statement_number}: ${data.error || "Fehler beim Speichern der Buchungen."}`
+        )
+      }
+
+      savedStatements += 1
+      savedTransactions += transactions.length
     }
 
-    // Erfolg: Vorschau schliessen und Liste aktualisieren
-    setParseResult(null)
+    // Erfolg: Vorschau schließen und Liste aktualisieren
+    setParseResults(null)
     setSaveSuccess(
-      `${transactions.length} Buchungen aus Kontoauszug ${parseResult?.statement_number} erfolgreich gespeichert.`
+      `${savedTransactions} Buchungen aus ${savedStatements} ${
+        savedStatements === 1 ? "Kontoauszug" : "Kontoauszügen"
+      } erfolgreich gespeichert.`
     )
     fetchStatements()
   }
 
   function handleCancel() {
-    setParseResult(null)
+    setParseResults(null)
   }
+
+  const previewActive = !!parseResults
 
   return (
     <div className="container px-4 py-8 md:px-6">
@@ -174,21 +191,20 @@ export default function AdminImportPage() {
       )}
 
       <div className="space-y-8">
-        {/* Upload-Bereich — bleibt während der Vorschau gemountet,
-            damit die Multi-File-Queue nicht verloren geht. */}
-        <div className={parseResult ? "hidden" : ""}>
+        {/* Upload-Bereich — während der Vorschau ausgeblendet */}
+        <div className={previewActive ? "hidden" : ""}>
           <PdfUploadZone
             hasApiToken={hasApiToken}
-            onParseComplete={handleParseComplete}
-            isPreviewActive={!!parseResult}
+            onAllParsed={handleAllParsed}
+            isPreviewActive={previewActive}
           />
         </div>
 
-        {/* Vorschau-Tabelle */}
-        {parseResult && (
-          <TransactionPreviewTable
-            result={parseResult}
-            onConfirm={handleConfirm}
+        {/* Gesammelte Vorschau aller geparsten Kontoauszüge */}
+        {parseResults && (
+          <MultiStatementPreview
+            results={parseResults}
+            onConfirmAll={handleConfirmAll}
             onCancel={handleCancel}
           />
         )}
