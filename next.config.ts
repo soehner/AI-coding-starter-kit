@@ -9,6 +9,13 @@ const nextConfig: NextConfig = {
   // pdfjs-dist nicht bündeln — Next.js lädt es direkt aus node_modules,
   // damit pdf.worker.mjs unter dem erwarteten Pfad gefunden wird.
   serverExternalPackages: ["pdfjs-dist"],
+  // pdf.worker.mjs wird erst zur Laufzeit per dynamic import geladen,
+  // daher wird er vom Default-Tracing nicht erkannt. Wir kopieren ihn
+  // explizit in die Serverless-Functions, die PDF-Parsing nutzen.
+  outputFileTracingIncludes: {
+    "/api/admin/import": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+    "/api/admin/import/confirm": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+  },
   async headers() {
     const defaultSecurityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
