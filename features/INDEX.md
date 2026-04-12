@@ -19,7 +19,7 @@
 | PROJ-5 | Eintragsbearbeitung & Bemerkungen | Deployed | [PROJ-5-eintragsbearbeitung.md](PROJ-5-eintragsbearbeitung.md) | 2026-04-10 |
 | PROJ-6 | Kassenbuch-Export (Excel) | Deployed | [PROJ-6-kassenbuch-export.md](PROJ-6-kassenbuch-export.md) | 2026-04-10 |
 | PROJ-7 | Granulare Feature-Berechtigungen | Deployed | [PROJ-7-feature-berechtigungen.md](PROJ-7-feature-berechtigungen.md) | 2026-04-10 |
-| PROJ-8 | Zwei-Faktor-Authentifizierung (2FA) | In Review | [PROJ-8-zwei-faktor-authentifizierung.md](PROJ-8-zwei-faktor-authentifizierung.md) | 2026-04-10 |
+| PROJ-8 | Zwei-Faktor-Authentifizierung (2FA) | Deployed | [PROJ-8-zwei-faktor-authentifizierung.md](PROJ-8-zwei-faktor-authentifizierung.md) | 2026-04-10 |
 
 | PROJ-9 | Seafile-Integration für Belege & Kontoauszüge | In Progress | [PROJ-9-seafile-integration.md](PROJ-9-seafile-integration.md) | 2026-04-10 |
 | PROJ-10 | Genehmigungssystem für Vereinsanträge | Planned | [PROJ-10-genehmigungssystem.md](PROJ-10-genehmigungssystem.md) | 2026-04-10 |

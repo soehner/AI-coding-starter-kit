@@ -1,8 +1,8 @@
 # PROJ-8: Zwei-Faktor-Authentifizierung (2FA)
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-10
-**Zuletzt aktualisiert:** 2026-04-10
+**Zuletzt aktualisiert:** 2026-04-12
 
 ## Abhängigkeiten
 - Benötigt: PROJ-1 (Authentifizierung) – Login-Flow muss bereits funktionieren
@@ -364,4 +364,15 @@ Die Deaktivierung nutzt jetzt `/api/auth/verify-password` mit einem separaten Su
 - **Produktionsreif:** JA (keine kritischen oder hohen Bugs verbleibend)
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+**Deployt am:** 2026-04-12
+**Produktions-URL:** https://cbs-finanz.vercel.app
+**Git-Tag:** v1.8.0-PROJ-8
+**Datenbank-Migration:** 008_mfa_backup_codes.sql (auf Supabase angewandt)
+
+### Deployed Komponenten
+- `/dashboard/sicherheit` – Sicherheitseinstellungen mit 2FA-Verwaltung
+- `/mfa-verifizierung` – Standalone MFA-Verifizierungsseite (Middleware-Sicherheitsnetz)
+- `/api/auth/mfa/*` – Backup-Code-Generierung, Verifizierung und Rate Limiting
+- `/api/auth/verify-password` – Passwort-Verifizierung ohne Session-Änderung
+- Middleware: AAL-Level-Prüfung für alle geschützten Routen
