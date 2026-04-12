@@ -200,6 +200,47 @@ async function createShareLink(
 }
 
 /**
+ * Liste der Dateiendungen, für die Seafile standardmäßig eine Online-
+ * Office-Vorschau (Collabora/OnlyOffice) anbietet. Bei öffentlichen
+ * Share-Links scheitert diese Vorschau auf Servern ohne Document-Server-
+ * Anbindung mit "Fehler beim Vorbereiten der Office Online-Dateivorschau".
+ * In diesen Fällen wollen wir den Share-Link direkt als Download ausliefern.
+ */
+const SEAFILE_OFFICE_EXTENSIONS = [
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".rtf",
+]
+
+/**
+ * Prüft, ob ein Dateiname auf eine Office-Datei hinweist, für die Seafile
+ * die Online-Vorschau aktivieren würde.
+ */
+export function isSeafileOfficeFile(fileName: string): boolean {
+  const lower = fileName.toLowerCase()
+  return SEAFILE_OFFICE_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+/**
+ * Hängt den `dl=1`-Parameter an einen Seafile-Share-Link an, damit der
+ * Browser bei Office-Dateien direkt den Download startet statt die
+ * nicht funktionierende Online-Vorschau aufzurufen.
+ */
+export function forceSeafileDownloadLink(shareLink: string): string {
+  if (!shareLink) return shareLink
+  if (shareLink.includes("dl=1")) return shareLink
+  const separator = shareLink.includes("?") ? "&" : "?"
+  return `${shareLink}${separator}dl=1`
+}
+
+/**
  * Bereinigt einen Dateinamen für die Seafile-Ablage.
  * - Umlaute werden transliteriert (ä→ae, ö→oe, ü→ue, ß→ss)
  * - Sonderzeichen werden durch Unterstrich ersetzt

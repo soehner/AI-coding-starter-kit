@@ -7,6 +7,8 @@ import {
   uploadToSeafile,
   deleteFromSeafile,
   generateReceiptFileName,
+  isSeafileOfficeFile,
+  forceSeafileDownloadLink,
 } from "@/lib/seafile"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
@@ -104,11 +106,18 @@ export async function POST(
       file.type || "application/octet-stream"
     )
 
+    // Office-Dateien würden von Seafile per Collabora/OnlyOffice-Vorschau
+    // geöffnet — auf Servern ohne Document-Server scheitert das. Für diese
+    // Dateien erzwingen wir den direkten Download über ?dl=1.
+    const finalLink = isSeafileOfficeFile(file.name)
+      ? forceSeafileDownloadLink(shareLink)
+      : shareLink
+
     // 8. Share-Link in document_ref speichern
     const { error: updateError } = await adminClient
       .from("transactions")
       .update({
-        document_ref: shareLink,
+        document_ref: finalLink,
         updated_at: new Date().toISOString(),
         updated_by: auth.profile.id,
       })
@@ -124,7 +133,7 @@ export async function POST(
 
     return NextResponse.json({
       message: "Beleg erfolgreich hochgeladen.",
-      document_ref: shareLink,
+      document_ref: finalLink,
     })
   } catch (error) {
     console.error("Document Upload Fehler:", error)
