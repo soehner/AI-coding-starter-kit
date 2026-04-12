@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
@@ -165,7 +166,7 @@ export function InviteUserDialog({ onInvited }: InviteUserDialogProps) {
 
             {/* PROJ-10: Zusatzrollen für Genehmigungssystem */}
             <div className="space-y-2">
-              <FormLabel>Zusatzrollen (optional)</FormLabel>
+              <Label>Zusatzrollen (optional)</Label>
               <p className="text-xs text-muted-foreground">
                 Genehmiger-Rollen für das Genehmigungssystem.
               </p>
