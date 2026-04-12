@@ -92,7 +92,92 @@
 <!-- Abschnitte unten werden von nachfolgenden Skills hinzugefügt -->
 
 ## Technisches Design (Solution Architect)
-_Wird von /architecture hinzugefügt_
+
+### Komponentenstruktur
+
+```
+Einstellungsseite (/dashboard/admin/settings)
++-- [bestehend] API-Einstellungen (KI-Token)
++-- [NEU] SeafileSettingsForm
+    +-- Eingabefelder (Server-URL, API-Token, Bibliotheks-ID, Basispfade)
+    +-- VerbindungTestenButton
+    +-- StatusAnzeige ("Verbindung OK" / Fehlermeldung)
+
+Dashboard (/dashboard)
++-- TransactionTable [erweitert]
+    +-- [NEU] BelegButton (pro Zeile)
+        +-- "Beleg hochladen" (nur Admins, wenn kein Beleg vorhanden)
+        +-- "Beleg ersetzen" (nur Admins, wenn Beleg vorhanden)
+        +-- "Beleg anschauen" (alle Nutzer, wenn Beleg vorhanden)
+    +-- [NEU] BelegUploadDialog
+        +-- Drag & Drop Zone (pdf-upload-zone.tsx als Vorlage)
+        +-- Fortschrittsanzeige (Progress-Komponente aus shadcn)
+        +-- Bestätigungsdialog bei Ersetzen (bestehender AlertDialog)
+
+ImportedStatementsList [erweitert]
++-- [NEU] Button "Kontoauszug anschauen" (pro Zeile)
+```
+
+### Datenmodell
+
+**Bestehende Tabelle `app_settings` — neue Schlüssel:**
+
+| Schlüssel | Inhalt |
+|---|---|
+| `seafile_url` | Server-Adresse (z.B. https://seafile.example.com) |
+| `seafile_token` | API-Token (verschlüsselt, wie KI-Token) |
+| `seafile_repo_id` | ID der Seafile-Bibliothek |
+| `seafile_receipt_path` | Basispfad für Belege (z.B. /Förderverein/Belege/) |
+| `seafile_statement_path` | Basispfad für Kontoauszüge |
+
+**Bestehende Tabelle `transactions` — Feldnutzung geändert:**
+- `document_ref` speichert jetzt einen Seafile-Download-Link statt Freitext
+
+**Bestehende Tabelle `bank_statements` — Feldnutzung geändert:**
+- `file_path` speichert jetzt einen Seafile-Download-Link statt Supabase-Storage-Pfad
+
+Keine neuen Datenbanktabellen nötig — alles nutzt bestehende Felder.
+
+### Neue API-Endpunkte
+
+| Endpunkt | Zweck | Berechtigung |
+|---|---|---|
+| `POST /api/admin/seafile/test` | Seafile-Verbindung testen | Admin |
+| `POST /api/transactions/[id]/document` | Beleg hochladen → zu Seafile, Link speichern | Admin / Edit-Berechtigung |
+| `DELETE /api/transactions/[id]/document` | Beleg-Link entfernen (vor Ersetzen) | Admin |
+
+**Modifizierte Endpunkte:**
+- `POST /api/admin/import` — lädt nach erfolgreichem Parsing zusätzlich das PDF auf Seafile hoch
+
+### Technische Entscheidungen
+
+**Warum alle Seafile-API-Aufrufe serverseitig?**
+Der Seafile-API-Token ist ein Administrator-Geheimnis. Würde er im Browser verwendet, könnten Nutzer ihn in den Entwickler-Tools einsehen. Die Next.js API-Routen fungieren als sicheres Proxy-Layer.
+
+**Warum keine neue Datenbanktabelle?**
+`document_ref` in `transactions` und `file_path` in `bank_statements` existieren bereits und wurden genau für diesen Zweck vorgehalten. Eine neue Tabelle würde unnötige Komplexität erzeugen.
+
+**Warum keine Seafile-SDK, sondern direkte API-Aufrufe?**
+Seafile bietet eine gut dokumentierte REST-API (v2.1). Eine eigene SDK-Abhängigkeit wäre überdimensioniert für ~5 benötigte API-Aufrufe.
+
+**Warum Unterordner pro Jahr automatisch erstellen?**
+Verhindert manuelle Seafile-Einrichtung bei jedem Jahreswechsel — die App ist selbstverwaltend.
+
+### Auswirkungen auf bestehende Features
+
+| Feature | Änderung |
+|---|---|
+| PROJ-3 (Import) | Nach dem Parsing: PDF zusätzlich zu Seafile hochladen, Link in `file_path` speichern |
+| PROJ-4 (Dashboard) | `TransactionTable` erhält neue Beleg-Buttons |
+| PROJ-5 (Bearbeitung) | `document_ref`-Feld wird als "Beleg vorhanden"-Badge mit Link angezeigt statt Freitext |
+| PROJ-3 (Einstellungen) | Bestehende Einstellungsseite wird um Seafile-Konfigurationsblock erweitert |
+
+### Abhängigkeiten (neue Pakete)
+
+Keine neuen Pakete nötig — alle benötigten Funktionen sind bereits vorhanden:
+- HTTP-Aufrufe: natives `fetch` (in Next.js enthalten)
+- Datei-Upload-UI: `pdf-upload-zone.tsx` als Vorlage
+- UI-Komponenten: `Progress`, `AlertDialog`, `Dialog` aus shadcn/ui bereits installiert
 
 ## QA-Testergebnisse
 _Wird von /qa hinzugefügt_
