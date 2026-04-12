@@ -37,10 +37,12 @@ const ROLE_LABELS: Record<ApprovalRoleType, string> = {
   zweiter_vorstand: "2. Vorstand",
 }
 
+const MAX_FILES = 10
+
 export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [fileError, setFileError] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -54,22 +56,39 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
     },
   })
 
-  const handleFileSelect = useCallback((file: File) => {
-    const validationError = validateApprovalFile(file)
-    if (validationError) {
-      setFileError(validationError)
-      setSelectedFile(null)
-      return
-    }
-    setFileError(null)
-    setSelectedFile(file)
-  }, [])
+  const addFiles = useCallback(
+    (incoming: File[]) => {
+      if (incoming.length === 0) return
+      setSelectedFiles((prev) => {
+        const combined = [...prev]
+        for (const file of incoming) {
+          if (combined.length >= MAX_FILES) {
+            setFileError(`Maximal ${MAX_FILES} Belege pro Antrag.`)
+            break
+          }
+          const validationError = validateApprovalFile(file)
+          if (validationError) {
+            setFileError(`${file.name}: ${validationError}`)
+            continue
+          }
+          const isDuplicate = combined.some(
+            (f) => f.name === file.name && f.size === file.size
+          )
+          if (isDuplicate) continue
+          combined.push(file)
+          setFileError(null)
+        }
+        return combined
+      })
+    },
+    []
+  )
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setIsDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFileSelect(file)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) addFiles(files)
   }
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
@@ -83,19 +102,19 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) handleFileSelect(file)
-  }
-
-  function removeFile() {
-    setSelectedFile(null)
-    setFileError(null)
+    const files = Array.from(e.target.files ?? [])
+    if (files.length > 0) addFiles(files)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
+  function removeFile(index: number) {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+    setFileError(null)
+  }
+
   async function onSubmit(values: ApprovalRequestInput) {
-    if (!selectedFile) {
-      setFileError("Bitte einen Beleg hochladen.")
+    if (selectedFiles.length === 0) {
+      setFileError("Bitte mindestens einen Beleg hochladen.")
       return
     }
 
@@ -104,7 +123,9 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
 
     try {
       const formData = new FormData()
-      formData.append("file", selectedFile)
+      for (const file of selectedFiles) {
+        formData.append("files", file)
+      }
       formData.append("note", values.note)
       formData.append("required_roles", JSON.stringify(values.required_roles))
       formData.append("link_type", values.link_type)
@@ -134,33 +155,42 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {/* Beleg-Upload */}
+        {/* Belege-Upload (Mehrfachauswahl) */}
         <div className="space-y-2">
-          <Label>Beleg *</Label>
+          <Label>Belege *</Label>
           <Card>
-            <CardContent className="p-4">
-              {selectedFile ? (
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{selectedFile.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(selectedFile.size / 1024).toFixed(0)} KB
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={removeFile}
-                    aria-label="Datei entfernen"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
+            <CardContent className="p-4 space-y-3">
+              {selectedFiles.length > 0 && (
+                <ul className="space-y-2">
+                  {selectedFiles.map((file, index) => (
+                    <li
+                      key={`${file.name}-${index}`}
+                      className="flex items-center justify-between rounded-lg border p-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <CheckCircle2 className="h-5 w-5 shrink-0 text-green-600" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{file.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(file.size / 1024).toFixed(0)} KB
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeFile(index)}
+                        aria-label={`${file.name} entfernen`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {selectedFiles.length < MAX_FILES && (
                 <div
                   className={cn(
                     "flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors",
@@ -175,7 +205,7 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
                   onClick={() => fileInputRef.current?.click()}
                   role="button"
                   tabIndex={0}
-                  aria-label="Beleg-Datei auswählen oder hierher ziehen"
+                  aria-label="Belege auswählen oder hierher ziehen"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
@@ -187,20 +217,25 @@ export function GenehmigungsFormular({ onSuccess }: GenehmigungsFormularProps) {
                     ref={fileInputRef}
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx"
+                    multiple
                     className="hidden"
                     onChange={handleInputChange}
                     aria-hidden="true"
                   />
                   <FileUp className="mb-2 h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm font-medium">Beleg hierher ziehen</p>
+                  <p className="text-sm font-medium">
+                    {selectedFiles.length === 0
+                      ? "Belege hierher ziehen"
+                      : "Weitere Belege hinzufügen"}
+                  </p>
                   <p className="text-xs text-muted-foreground">
-                    oder klicken — PDF, JPG, PNG, HEIC, DOC, DOCX (max. 10 MB)
+                    oder klicken — PDF, JPG, PNG, HEIC, DOC, DOCX (max. 10 MB pro Datei, bis zu {MAX_FILES} Dateien)
                   </p>
                 </div>
               )}
 
               {fileError && (
-                <Alert variant="destructive" className="mt-3">
+                <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{fileError}</AlertDescription>
                 </Alert>

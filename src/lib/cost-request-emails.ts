@@ -79,7 +79,7 @@ export async function sendApprovalRequestEmail(
   const safeRecipientLabel = escapeHtml(params.recipientLabel)
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
       to: params.recipientEmail,
       subject: `Kostenübernahme-Antrag: ${params.applicantName} – ${formatAmount(params.amount)}`,
@@ -130,6 +130,10 @@ export async function sendApprovalRequestEmail(
         </div>
       `,
     })
+    if (sendError) {
+      console.error(`E-Mail-Versand fehlgeschlagen an ${params.recipientEmail}:`, sendError)
+      return { success: false, error: sendError.message }
+    }
     return { success: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler"
@@ -162,7 +166,7 @@ export async function sendVoteNotificationEmail(
   const safeApplicantName = escapeHtml(params.applicantName)
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
       to: params.recipientEmail,
       subject: `Abstimmungs-Update: ${params.voterLabel} hat ${decisionText}`,
@@ -184,6 +188,9 @@ export async function sendVoteNotificationEmail(
         </div>
       `,
     })
+    if (sendError) {
+      console.error(`Benachrichtigungs-E-Mail fehlgeschlagen an ${params.recipientEmail}:`, sendError)
+    }
   } catch (error) {
     console.error(`Benachrichtigungs-E-Mail fehlgeschlagen an ${params.recipientEmail}:`, error)
   }
@@ -216,7 +223,7 @@ export async function sendFinalDecisionToApprover(
     .join("")
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
       to: params.recipientEmail,
       subject: `Entscheidung: Antrag ${params.finalDecision} – ${params.applicantName}`,
@@ -240,6 +247,9 @@ export async function sendFinalDecisionToApprover(
         </div>
       `,
     })
+    if (sendError) {
+      console.error(`Abschluss-E-Mail fehlgeschlagen an ${params.recipientEmail}:`, sendError)
+    }
   } catch (error) {
     console.error(`Abschluss-E-Mail fehlgeschlagen an ${params.recipientEmail}:`, error)
   }
@@ -276,7 +286,7 @@ export async function sendDecisionToApplicant(
       : "Leider wurde Ihr Antrag abgelehnt. Bei Fragen wenden Sie sich bitte an den Vorstand des CBS-Mannheim Fördervereins."
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
       to: params.applicantEmail,
       subject: `Ihr Kostenübernahme-Antrag wurde ${params.finalDecision}`,
@@ -302,6 +312,9 @@ export async function sendDecisionToApplicant(
         </div>
       `,
     })
+    if (sendError) {
+      console.error(`Ergebnis-E-Mail fehlgeschlagen an ${params.applicantEmail}:`, sendError)
+    }
   } catch (error) {
     console.error(`Ergebnis-E-Mail fehlgeschlagen an ${params.applicantEmail}:`, error)
   }

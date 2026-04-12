@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
+import { requireAdmin } from "@/lib/admin-auth"
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -53,6 +54,12 @@ export async function GET(
       created_at,
       updated_at,
       creator:user_profiles!approval_requests_created_by_fkey ( email ),
+      approval_documents (
+        id,
+        document_url,
+        document_name,
+        display_order
+      ),
       approval_decisions (
         id,
         request_id,
@@ -83,14 +90,20 @@ export async function GET(
     id: string
     created_by: string
     note: string
-    document_url: string
-    document_name: string
+    document_url: string | null
+    document_name: string | null
     required_roles: string[]
     link_type: string
     status: string
     created_at: string
     updated_at: string
     creator: Relation
+    approval_documents: Array<{
+      id: string
+      document_url: string
+      document_name: string
+      display_order: number
+    }>
     approval_decisions: Array<{
       id: string
       request_id: string
@@ -110,6 +123,10 @@ export async function GET(
     note: raw.note,
     document_url: raw.document_url,
     document_name: raw.document_name,
+    documents: (raw.approval_documents || [])
+      .slice()
+      .sort((a, b) => a.display_order - b.display_order)
+      .map((d) => ({ id: d.id, url: d.document_url, name: d.document_name })),
     required_roles: raw.required_roles,
     link_type: raw.link_type,
     status: raw.status,
@@ -126,4 +143,44 @@ export async function GET(
       decided_at: d.decided_at,
     })),
   })
+}
+
+/**
+ * DELETE /api/approvals/[id]
+ * Löscht einen Genehmigungsantrag samt Entscheidungen, Tokens und Dokument-Einträgen.
+ * Nur für Admins. Dateien auf Seafile bleiben erhalten (könnten in Belegordner
+ * archiviert bleiben) – hier wird nur der Datenbank-Eintrag entfernt.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params
+
+  if (!UUID_REGEX.test(id)) {
+    return NextResponse.json(
+      { error: "Ungültige Antrags-ID." },
+      { status: 400 }
+    )
+  }
+
+  const adminResult = await requireAdmin()
+  if (adminResult.error) return adminResult.error
+
+  const adminClient = createAdminSupabaseClient()
+
+  const { error: deleteError } = await adminClient
+    .from("approval_requests")
+    .delete()
+    .eq("id", id)
+
+  if (deleteError) {
+    console.error("Antrag-Löschung fehlgeschlagen:", deleteError)
+    return NextResponse.json(
+      { error: "Antrag konnte nicht gelöscht werden." },
+      { status: 500 }
+    )
+  }
+
+  return NextResponse.json({ message: "Antrag gelöscht." })
 }

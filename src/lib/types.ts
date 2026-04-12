@@ -53,6 +53,14 @@ export interface BankStatement {
   created_at: string
 }
 
+// PROJ-12: Buchungskategorisierung
+export interface Category {
+  id: string
+  name: string
+  color: string
+  created_at: string
+}
+
 // PROJ-4: Dashboard-Typen
 export interface Transaction {
   id: string
@@ -138,13 +146,22 @@ export type ApprovalStatus = "offen" | "genehmigt" | "abgelehnt" | "entwurf"
 export type ApprovalLinkType = "und" | "oder"
 export type ApprovalRoleType = "vorstand" | "zweiter_vorstand"
 
+export interface ApprovalDocument {
+  id: string
+  url: string
+  name: string
+}
+
 export interface ApprovalRequest {
   id: string
   created_by: string
   created_by_email?: string
   note: string
-  document_url: string
-  document_name: string
+  /** @deprecated Nutze `documents` — bleibt für Altdaten gefüllt. */
+  document_url: string | null
+  /** @deprecated Nutze `documents` — bleibt für Altdaten gefüllt. */
+  document_name: string | null
+  documents: ApprovalDocument[]
   required_roles: ApprovalRoleType[]
   link_type: ApprovalLinkType
   status: ApprovalStatus

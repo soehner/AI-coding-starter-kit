@@ -39,6 +39,7 @@ const ALLOWED_MIME_TYPES = new Set([
 ])
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
+const MAX_FILES_PER_REQUEST = 10
 
 /**
  * POST /api/approvals/[id]/resubmit
@@ -69,11 +70,14 @@ export async function POST(
 
   const adminClient = createAdminSupabaseClient()
 
-  // 1. Antrag laden
+  // 1. Antrag inkl. Dokumente laden
   const { data: existing, error: loadError } = await adminClient
     .from("approval_requests")
     .select(
-      "id, note, document_url, document_name, required_roles, link_type, status, created_by"
+      `
+      id, note, document_url, document_name, required_roles, link_type, status, created_by,
+      approval_documents ( id, document_url, document_name, display_order )
+      `
     )
     .eq("id", id)
     .single()
@@ -96,7 +100,7 @@ export async function POST(
   let newNote: string | null = null
   let newRoles: ApprovalRoleType[] | null = null
   let newLinkType: "und" | "oder" | null = null
-  let newFile: File | null = null
+  let newFiles: File[] = []
 
   const contentType = request.headers.get("content-type") ?? ""
   if (contentType.includes("multipart/form-data")) {
@@ -113,7 +117,7 @@ export async function POST(
     const noteRaw = formData.get("note")
     const rolesRaw = formData.get("required_roles")
     const linkRaw = formData.get("link_type")
-    const fileRaw = formData.get("file")
+    const filesRaw = formData.getAll("files")
 
     const patchPayload: Record<string, unknown> = {}
     if (typeof noteRaw === "string" && noteRaw.trim().length > 0) {
@@ -153,45 +157,38 @@ export async function POST(
         newLinkType = validation.data.link_type
     }
 
-    if (fileRaw instanceof File && fileRaw.size > 0) {
-      newFile = fileRaw
+    newFiles = filesRaw.filter(
+      (f): f is File => f instanceof File && f.size > 0
+    )
+
+    if (newFiles.length > MAX_FILES_PER_REQUEST) {
+      return NextResponse.json(
+        { error: `Maximal ${MAX_FILES_PER_REQUEST} Belege pro Antrag erlaubt.` },
+        { status: 400 }
+      )
     }
   }
 
-  // 3. Neuer Beleg? → validieren und zu Seafile hochladen
-  let newDocumentUrl: string | null = null
-  let newDocumentPath: string | null = null
-  let newDocumentName: string | null = null
+  // 3. Neue Belege? → validieren und zu Seafile hochladen
+  type UploadedDoc = { url: string; name: string; path: string }
+  let uploadedDocs: UploadedDoc[] = []
 
-  if (newFile) {
-    if (!ALLOWED_MIME_TYPES.has(newFile.type)) {
-      return NextResponse.json(
-        {
-          error: "Dateityp nicht erlaubt. Erlaubt: PDF, JPG, PNG, HEIC, DOC, DOCX.",
-        },
-        { status: 400 }
-      )
-    }
-    if (newFile.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: "Die Datei ist zu groß (maximal 10 MB)." },
-        { status: 400 }
-      )
-    }
-
-    const buffer = Buffer.from(await newFile.arrayBuffer())
-    const detected = detectFileTypeFromBuffer(buffer)
-    if (
-      detected.kind === "unknown" ||
-      !ALLOWED_MIME_TYPES.has(detected.mimeType)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Der Dateiinhalt entspricht keinem erlaubten Format.",
-        },
-        { status: 400 }
-      )
+  if (newFiles.length > 0) {
+    for (const file of newFiles) {
+      if (!ALLOWED_MIME_TYPES.has(file.type)) {
+        return NextResponse.json(
+          {
+            error: `Dateityp nicht erlaubt (${file.name}). Erlaubt: PDF, JPG, PNG, HEIC, DOC, DOCX.`,
+          },
+          { status: 400 }
+        )
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          { error: `Die Datei "${file.name}" ist zu groß (maximal 10 MB).` },
+          { status: 400 }
+        )
+      }
     }
 
     const seafileSetup = await loadSeafileConfig(adminClient, decrypt)
@@ -202,36 +199,55 @@ export async function POST(
       )
     }
 
-    newDocumentName = sanitizeDocumentName(newFile.name || "beleg")
     const year = new Date().getFullYear().toString()
-    const sanitized = sanitizeFileName(newDocumentName)
     const timestampPrefix = new Date().toISOString().split("T")[0]
-    const finalName = `${timestampPrefix}_${sanitized}`
 
-    try {
-      const upload = await uploadToSeafile(
-        seafileSetup.config,
-        "/Förderverein/Genehmigungen/",
-        year,
-        finalName,
-        buffer,
-        detected.mimeType
-      )
-      newDocumentUrl = upload.shareLink
-      newDocumentPath = upload.filePath
-    } catch (err) {
-      console.error("Seafile-Upload beim Resubmit fehlgeschlagen:", err)
-      return NextResponse.json(
-        { error: "Beleg konnte nicht hochgeladen werden." },
-        { status: 502 }
-      )
-    }
+    for (const file of newFiles) {
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const detected = detectFileTypeFromBuffer(buffer)
+      if (
+        detected.kind === "unknown" ||
+        !ALLOWED_MIME_TYPES.has(detected.mimeType)
+      ) {
+        return NextResponse.json(
+          {
+            error: `Der Dateiinhalt von "${file.name}" entspricht keinem erlaubten Format.`,
+          },
+          { status: 400 }
+        )
+      }
 
-    if (!isValidDocumentUrl(newDocumentUrl)) {
-      return NextResponse.json(
-        { error: "Seafile lieferte einen ungültigen Share-Link." },
-        { status: 502 }
-      )
+      const safeName = sanitizeDocumentName(file.name || "beleg")
+      const sanitized = sanitizeFileName(safeName)
+      const finalName = `${timestampPrefix}_${sanitized}`
+
+      try {
+        const upload = await uploadToSeafile(
+          seafileSetup.config,
+          "/Förderverein/Genehmigungen/",
+          year,
+          finalName,
+          buffer,
+          detected.mimeType
+        )
+        if (!isValidDocumentUrl(upload.shareLink)) {
+          return NextResponse.json(
+            { error: "Seafile lieferte einen ungültigen Share-Link." },
+            { status: 502 }
+          )
+        }
+        uploadedDocs.push({
+          url: upload.shareLink,
+          name: safeName,
+          path: upload.filePath,
+        })
+      } catch (err) {
+        console.error("Seafile-Upload beim Resubmit fehlgeschlagen:", err)
+        return NextResponse.json(
+          { error: `Beleg "${file.name}" konnte nicht hochgeladen werden.` },
+          { status: 502 }
+        )
+      }
     }
   }
 
@@ -240,10 +256,11 @@ export async function POST(
   if (newNote !== null) updatePayload.note = newNote
   if (newRoles !== null) updatePayload.required_roles = newRoles
   if (newLinkType !== null) updatePayload.link_type = newLinkType
-  if (newDocumentUrl !== null) {
-    updatePayload.document_url = newDocumentUrl
-    updatePayload.document_path = newDocumentPath
-    updatePayload.document_name = newDocumentName
+  if (uploadedDocs.length > 0) {
+    // Primärbeleg (Kompatibilität) = erster neuer Beleg
+    updatePayload.document_url = uploadedDocs[0].url
+    updatePayload.document_path = uploadedDocs[0].path
+    updatePayload.document_name = uploadedDocs[0].name
   }
 
   const effectiveRoles =
@@ -310,17 +327,60 @@ export async function POST(
     )
   }
 
+  // 8b. Dokumente austauschen, falls neue hochgeladen wurden
+  if (uploadedDocs.length > 0) {
+    await adminClient.from("approval_documents").delete().eq("request_id", id)
+
+    const { error: insertDocsError } = await adminClient
+      .from("approval_documents")
+      .insert(
+        uploadedDocs.map((d, index) => ({
+          request_id: id,
+          document_url: d.url,
+          document_name: d.name,
+          document_path: d.path,
+          display_order: index,
+        }))
+      )
+
+    if (insertDocsError) {
+      console.error("Fehler beim Ersetzen der Dokumente:", insertDocsError)
+      return NextResponse.json(
+        { error: "Belege konnten nicht aktualisiert werden." },
+        { status: 500 }
+      )
+    }
+  }
+
   // 9. Neue Tokens + E-Mails mit den aktuellen Daten
   const finalNote = newNote ?? existing.note
-  const finalUrl = newDocumentUrl ?? existing.document_url
-  const finalName = newDocumentName ?? existing.document_name
+
+  type DocRow = {
+    id: string
+    document_url: string
+    document_name: string
+    display_order: number
+  }
+  const existingDocs = (
+    (existing as unknown as { approval_documents: DocRow[] }).approval_documents ?? []
+  )
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+
+  const documentsForEmail =
+    uploadedDocs.length > 0
+      ? uploadedDocs.map((d) => ({ url: d.url, name: d.name }))
+      : existingDocs.length > 0
+        ? existingDocs.map((d) => ({ url: d.document_url, name: d.document_name }))
+        : existing.document_url && existing.document_name
+          ? [{ url: existing.document_url, name: existing.document_name }]
+          : []
 
   try {
     const result = await issueTokensAndSendEmails(adminClient, {
       requestId: id,
       note: finalNote,
-      documentUrl: finalUrl,
-      documentName: finalName,
+      documents: documentsForEmail,
       createdAt: new Date().toISOString(),
       requesterEmail: creator?.email ?? adminResult.profile.email,
       approvers,

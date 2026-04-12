@@ -25,6 +25,16 @@ import {
 } from "@/components/ui/collapsible"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { GenehmigungResubmitDialog } from "@/components/genehmigung-resubmit-dialog"
 import {
   AlertCircle,
@@ -33,6 +43,7 @@ import {
   Loader2,
   RefreshCw,
   Send,
+  Trash2,
 } from "lucide-react"
 import type { ApprovalRequestWithDecisions, ApprovalStatus, ApprovalRoleType } from "@/lib/types"
 
@@ -43,6 +54,7 @@ interface GenehmigungTabellProps {
   isAdmin: boolean
   onRefresh?: () => Promise<void> | void
   onRetrySend?: (requestId: string) => Promise<void>
+  onDelete?: (requestId: string) => Promise<void>
 }
 
 const STATUS_LABELS: Record<ApprovalStatus, string> = {
@@ -89,12 +101,16 @@ export function GenehmigungTabelle({
   isAdmin,
   onRefresh,
   onRetrySend,
+  onDelete,
 }: GenehmigungTabellProps) {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [retrying, setRetrying] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [resubmitDialogRequest, setResubmitDialogRequest] =
+    useState<ApprovalRequestWithDecisions | null>(null)
+  const [deleteTarget, setDeleteTarget] =
     useState<ApprovalRequestWithDecisions | null>(null)
 
   const filteredRequests = statusFilter === "all"
@@ -122,6 +138,23 @@ export function GenehmigungTabelle({
       )
     } finally {
       setRetrying(null)
+    }
+  }
+
+  async function handleDelete() {
+    if (!onDelete || !deleteTarget) return
+    const targetId = deleteTarget.id
+    setDeleting(targetId)
+    setActionError(null)
+    try {
+      await onDelete(targetId)
+      setDeleteTarget(null)
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Antrag konnte nicht gelöscht werden."
+      )
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -259,7 +292,7 @@ export function GenehmigungTabelle({
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                            {request.document_url && (
+                            {request.documents.length === 1 && (
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -267,7 +300,7 @@ export function GenehmigungTabelle({
                                 aria-label="Beleg öffnen"
                               >
                                 <a
-                                  href={request.document_url}
+                                  href={request.documents[0].url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >
@@ -300,6 +333,17 @@ export function GenehmigungTabelle({
                                 <RefreshCw className="h-4 w-4" />
                               </Button>
                             )}
+                            {isAdmin && onDelete && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setDeleteTarget(request)}
+                                aria-label="Antrag löschen"
+                                className="text-destructive hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -319,21 +363,27 @@ export function GenehmigungTabelle({
                                 </p>
                               </div>
 
-                              {/* Beleg */}
-                              {request.document_url && (
+                              {/* Belege */}
+                              {request.documents.length > 0 && (
                                 <div>
                                   <p className="text-xs font-medium text-muted-foreground mb-1">
-                                    Beleg
+                                    {request.documents.length > 1 ? "Belege" : "Beleg"}
                                   </p>
-                                  <a
-                                    href={request.document_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sm text-primary underline underline-offset-4 inline-flex items-center gap-1"
-                                  >
-                                    {request.document_name}
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
+                                  <ul className="space-y-1">
+                                    {request.documents.map((doc) => (
+                                      <li key={doc.id}>
+                                        <a
+                                          href={doc.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-sm text-primary underline underline-offset-4 inline-flex items-center gap-1"
+                                        >
+                                          {doc.name}
+                                          <ExternalLink className="h-3 w-3" />
+                                        </a>
+                                      </li>
+                                    ))}
+                                  </ul>
                                 </div>
                               )}
 
@@ -422,6 +472,45 @@ export function GenehmigungTabelle({
           }}
         />
       )}
+
+      {/* Löschen-Bestätigung */}
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Antrag löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dieser Antrag und alle zugehörigen Entscheidungen und Tokens werden unwiderruflich gelöscht. Die Belege auf Seafile bleiben erhalten.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting !== null}>
+              Abbrechen
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDelete()
+              }}
+              disabled={deleting !== null}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting !== null ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Lösche…
+                </>
+              ) : (
+                "Löschen"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

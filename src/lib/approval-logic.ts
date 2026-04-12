@@ -77,8 +77,7 @@ export async function issueTokensAndSendEmails(
   params: {
     requestId: string
     note: string
-    documentUrl: string
-    documentName: string
+    documents: Array<{ url: string; name: string }>
     createdAt: string
     requesterEmail: string
     approvers: ApproverProfile[]
@@ -143,8 +142,7 @@ export async function issueTokensAndSendEmails(
       recipientRoleLabel: ROLE_LABELS[job.approverRole],
       requesterEmail: params.requesterEmail,
       note: params.note,
-      documentUrl: params.documentUrl,
-      documentName: params.documentName,
+      documents: params.documents,
       createdAt: params.createdAt,
       decisionUrl: buildDecisionUrl(job.token),
     })

@@ -75,8 +75,7 @@ interface ApprovalRequestEmailParams {
   recipientRoleLabel: string
   requesterEmail: string
   note: string
-  documentUrl: string
-  documentName: string
+  documents: Array<{ url: string; name: string }>
   createdAt: string
   decisionUrl: string
 }
@@ -92,15 +91,21 @@ export async function sendApprovalRequestEmail(
   const safeNote = escapeHtml(params.note).replace(/\n/g, "<br>")
   const safeRequester = escapeHtml(params.requesterEmail)
   const safeRoleLabel = escapeHtml(params.recipientRoleLabel)
-  const safeDocName = escapeHtml(params.documentName)
 
   // BUG-8 / BUG-12: URLs sicher escapen (nur https)
-  const safeDocHref = safeHref(params.documentUrl)
   const approveHref = safeHref(`${params.decisionUrl}?aktion=genehmigen`)
   const rejectHref = safeHref(`${params.decisionUrl}?aktion=ablehnen`)
 
+  const docsListHtml = params.documents
+    .map(
+      (doc) =>
+        `<li style="margin: 2px 0;"><a href="${safeHref(doc.url)}" style="color: #2563eb;" target="_blank" rel="noopener noreferrer">${escapeHtml(doc.name)}</a></li>`
+    )
+    .join("")
+  const belegLabel = params.documents.length > 1 ? "Belege" : "Beleg"
+
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
       to: params.recipientEmail,
       subject: `Genehmigungsanfrage vom CBS-Förderverein`,
@@ -126,11 +131,9 @@ export async function sendApprovalRequestEmail(
               <td style="padding: 8px 0;">${safeNote}</td>
             </tr>
             <tr>
-              <td style="padding: 8px 0; font-weight: bold; color: #666;">Beleg</td>
+              <td style="padding: 8px 0; font-weight: bold; color: #666; vertical-align: top;">${belegLabel}</td>
               <td style="padding: 8px 0;">
-                <a href="${safeDocHref}" style="color: #2563eb;" target="_blank" rel="noopener noreferrer">
-                  ${safeDocName}
-                </a>
+                <ul style="margin: 0; padding-left: 18px;">${docsListHtml}</ul>
               </td>
             </tr>
           </table>
@@ -159,6 +162,13 @@ export async function sendApprovalRequestEmail(
         </div>
       `,
     })
+    if (sendError) {
+      console.error(
+        `Genehmigungs-E-Mail an ${params.recipientEmail} fehlgeschlagen:`,
+        sendError
+      )
+      return { success: false, error: sendError.message }
+    }
     return { success: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler"
@@ -210,7 +220,7 @@ export async function sendDecisionNotificationEmail(
     .join("")
 
   try {
-    await resend.emails.send({
+    const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
       to: params.recipientEmail,
       subject: `Dein Genehmigungsantrag wurde ${params.finalDecision}`,
@@ -245,6 +255,12 @@ export async function sendDecisionNotificationEmail(
         </div>
       `,
     })
+    if (sendError) {
+      console.error(
+        `Entscheidungs-E-Mail an ${params.recipientEmail} fehlgeschlagen:`,
+        sendError
+      )
+    }
   } catch (error) {
     console.error(
       `Entscheidungs-E-Mail an ${params.recipientEmail} fehlgeschlagen:`,

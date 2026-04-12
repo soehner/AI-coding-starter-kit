@@ -148,7 +148,13 @@ export async function GET(
       document_name,
       status,
       created_at,
-      creator:user_profiles!approval_requests_created_by_fkey ( email )
+      creator:user_profiles!approval_requests_created_by_fkey ( email ),
+      approval_documents (
+        id,
+        document_url,
+        document_name,
+        display_order
+      )
       `
     )
     .eq("id", dbToken.request_id)
@@ -168,17 +174,35 @@ export async function GET(
     )
   }
 
-  const creator = (requestRow as unknown as {
+  const typedRow = requestRow as unknown as {
+    id: string
+    note: string
+    document_url: string | null
+    document_name: string | null
+    created_at: string
     creator: { email: string } | { email: string }[] | null
-  }).creator
+    approval_documents: Array<{
+      id: string
+      document_url: string
+      document_name: string
+      display_order: number
+    }>
+  }
+  const creator = typedRow.creator
   const creatorEmail = Array.isArray(creator) ? creator[0]?.email : creator?.email
 
+  const documents = (typedRow.approval_documents || [])
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((d) => ({ id: d.id, url: d.document_url, name: d.document_name }))
+
   return NextResponse.json({
-    request_id: requestRow.id,
-    note: requestRow.note,
-    document_url: requestRow.document_url,
-    document_name: requestRow.document_name,
-    created_at: requestRow.created_at,
+    request_id: typedRow.id,
+    note: typedRow.note,
+    document_url: typedRow.document_url,
+    document_name: typedRow.document_name,
+    documents,
+    created_at: typedRow.created_at,
     created_by_email: creatorEmail ?? "",
   })
 }

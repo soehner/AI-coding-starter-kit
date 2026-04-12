@@ -37,11 +37,14 @@ export async function POST(
 
   const adminClient = createAdminSupabaseClient()
 
-  // Antrag laden
+  // Antrag laden (inkl. Dokumente)
   const { data: request, error: loadError } = await adminClient
     .from("approval_requests")
     .select(
-      "id, note, document_url, document_name, required_roles, link_type, status, created_by, created_at"
+      `
+      id, note, document_url, document_name, required_roles, link_type, status, created_by, created_at,
+      approval_documents ( id, document_url, document_name, display_order )
+      `
     )
     .eq("id", id)
     .single()
@@ -86,13 +89,37 @@ export async function POST(
   // Alte Tokens (falls vorhanden) löschen, um UNIQUE-Constraint nicht zu brechen
   await adminClient.from("approval_tokens").delete().eq("request_id", id)
 
+  type DocRow = {
+    id: string
+    document_url: string
+    document_name: string
+    display_order: number
+  }
+  const docRows = ((request as unknown as { approval_documents: DocRow[] })
+    .approval_documents ?? [])
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+
+  const documents =
+    docRows.length > 0
+      ? docRows.map((d) => ({ url: d.document_url, name: d.document_name }))
+      : request.document_url && request.document_name
+        ? [{ url: request.document_url, name: request.document_name }]
+        : []
+
+  if (documents.length === 0) {
+    return NextResponse.json(
+      { error: "Der Antrag enthält keine Belege." },
+      { status: 400 }
+    )
+  }
+
   let result: { sent: number; failed: number }
   try {
     result = await issueTokensAndSendEmails(adminClient, {
       requestId: id,
       note: request.note,
-      documentUrl: request.document_url,
-      documentName: request.document_name,
+      documents,
       createdAt: request.created_at,
       requesterEmail: creator?.email ?? adminResult.profile.email,
       approvers,

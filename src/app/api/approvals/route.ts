@@ -40,6 +40,12 @@ export async function GET() {
       created_at,
       updated_at,
       creator:user_profiles!approval_requests_created_by_fkey ( email ),
+      approval_documents (
+        id,
+        document_url,
+        document_name,
+        display_order
+      ),
       approval_decisions (
         id,
         request_id,
@@ -74,18 +80,26 @@ export async function GET() {
     approver: { email: string } | { email: string }[] | null
   }
 
+  type RawDocument = {
+    id: string
+    document_url: string
+    document_name: string
+    display_order: number
+  }
+
   type RawRequest = {
     id: string
     created_by: string
     note: string
-    document_url: string
-    document_name: string
+    document_url: string | null
+    document_name: string | null
     required_roles: string[]
     link_type: string
     status: string
     created_at: string
     updated_at: string
     creator: { email: string } | { email: string }[] | null
+    approval_documents: RawDocument[]
     approval_decisions: RawDecision[]
   }
 
@@ -104,6 +118,14 @@ export async function GET() {
     note: r.note,
     document_url: r.document_url,
     document_name: r.document_name,
+    documents: (r.approval_documents || [])
+      .slice()
+      .sort((a, b) => a.display_order - b.display_order)
+      .map((d) => ({
+        id: d.id,
+        url: d.document_url,
+        name: d.document_name,
+      })),
     required_roles: r.required_roles,
     link_type: r.link_type,
     status: r.status,

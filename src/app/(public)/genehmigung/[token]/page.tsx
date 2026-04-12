@@ -10,8 +10,9 @@ import { AlertCircle, XCircle } from "lucide-react"
 interface ApprovalInfo {
   request_id: string
   note: string
-  document_url: string
-  document_name: string
+  document_url: string | null
+  document_name: string | null
+  documents: Array<{ id: string; url: string; name: string }>
   created_at: string
   created_by_email: string
 }

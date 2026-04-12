@@ -65,6 +65,20 @@ export default function GenehmigungPage() {
     await fetchRequests()
   }
 
+  async function handleDelete(requestId: string) {
+    const response = await fetch(`/api/approvals/${requestId}`, {
+      method: "DELETE",
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      throw new Error(data.error || "Antrag konnte nicht gelöscht werden.")
+    }
+
+    await fetchRequests()
+  }
+
   if (authLoading) {
     return (
       <div className="container px-4 py-8 md:px-6">
@@ -102,6 +116,7 @@ export default function GenehmigungPage() {
         isAdmin={isAdmin}
         onRefresh={isAdmin ? fetchRequests : undefined}
         onRetrySend={isAdmin ? handleRetrySend : undefined}
+        onDelete={isAdmin ? handleDelete : undefined}
       />
     </div>
   )

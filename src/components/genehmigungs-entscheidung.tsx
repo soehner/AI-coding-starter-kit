@@ -33,8 +33,9 @@ import {
 interface ApprovalInfo {
   request_id: string
   note: string
-  document_url: string
-  document_name: string
+  document_url: string | null
+  document_name: string | null
+  documents: Array<{ id: string; url: string; name: string }>
   created_at: string
   created_by_email: string
 }
@@ -185,19 +186,27 @@ export function GenehmigungsEntscheidung({
           </p>
         </div>
 
-        {/* Beleg */}
-        {approvalInfo.document_url && (
+        {/* Belege */}
+        {approvalInfo.documents.length > 0 && (
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-1">Beleg</p>
-            <a
-              href={approvalInfo.document_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary underline underline-offset-4 inline-flex items-center gap-1"
-            >
-              {approvalInfo.document_name}
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              {approvalInfo.documents.length > 1 ? "Belege" : "Beleg"}
+            </p>
+            <ul className="space-y-1">
+              {approvalInfo.documents.map((doc) => (
+                <li key={doc.id}>
+                  <a
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary underline underline-offset-4 inline-flex items-center gap-1"
+                  >
+                    {doc.name}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
