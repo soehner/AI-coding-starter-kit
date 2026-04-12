@@ -69,6 +69,31 @@ function formatDate(dateString: string): string {
   }
 }
 
+/**
+ * Prüft, ob ein String ein gültiges ISO-Datum (YYYY-MM-DD) ist und tatsächlich
+ * existiert. Fängt Fälle wie "2026-02-30" ab, die der Date-Konstruktor sonst
+ * still auf "2026-03-02" normalisieren würde.
+ */
+function isValidIsoDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
+  const [y, m, d] = s.split("-").map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  return (
+    date.getUTCFullYear() === y &&
+    date.getUTCMonth() === m - 1 &&
+    date.getUTCDate() === d
+  )
+}
+
+/**
+ * Markiert Buchungen, bei denen die KI ein ungültiges Datum extrahiert hat.
+ * Wird in der Vorschau hervorgehoben, damit der User es korrigieren kann,
+ * bevor er den Speichern-Button drückt.
+ */
+function hasInvalidDates(tx: { booking_date: string; value_date: string }): boolean {
+  return !isValidIsoDate(tx.booking_date) || !isValidIsoDate(tx.value_date)
+}
+
 export function TransactionPreviewTable({
   result,
   onConfirm,
@@ -83,9 +108,12 @@ export function TransactionPreviewTable({
   const [editValues, setEditValues] = useState<{
     description: string
     amount: string
-  }>({ description: "", amount: "" })
+    booking_date: string
+    value_date: string
+  }>({ description: "", amount: "", booking_date: "", value_date: "" })
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [rowError, setRowError] = useState<string | null>(null)
 
   const activeTransactions = transactions.filter((t) => !t.isRemoved)
   const duplicateCount = activeTransactions.filter((t) => t.isDuplicate).length
@@ -100,28 +128,64 @@ export function TransactionPreviewTable({
 
   const startEdit = useCallback((tx: ParsedTransaction) => {
     setEditingId(tx.id)
+    setRowError(null)
     setEditValues({
       description: tx.description,
-      amount: tx.amount.toString(),
+      amount: tx.amount.toString().replace(".", ","),
+      // Wenn das Datum aus der KI-Extraktion ungültig ist (z.B. 30.02.),
+      // lassen wir das Feld leer, damit der Browser-Datepicker den User
+      // zwingt, ein gültiges Datum zu wählen.
+      booking_date: isValidIsoDate(tx.booking_date) ? tx.booking_date : "",
+      value_date: isValidIsoDate(tx.value_date) ? tx.value_date : "",
     })
   }, [])
 
   const cancelEdit = useCallback(() => {
     setEditingId(null)
-    setEditValues({ description: "", amount: "" })
+    setRowError(null)
+    setEditValues({
+      description: "",
+      amount: "",
+      booking_date: "",
+      value_date: "",
+    })
   }, [])
 
   const saveEdit = useCallback(
     (id: string) => {
+      setRowError(null)
+
       const parsedAmount = parseFloat(editValues.amount.replace(",", "."))
       if (isNaN(parsedAmount)) {
+        setRowError("Betrag ist keine gültige Zahl.")
+        return
+      }
+
+      if (!editValues.description.trim()) {
+        setRowError("Buchungstext darf nicht leer sein.")
+        return
+      }
+
+      if (!isValidIsoDate(editValues.booking_date)) {
+        setRowError("Bitte ein gültiges Buchungsdatum wählen.")
+        return
+      }
+
+      if (!isValidIsoDate(editValues.value_date)) {
+        setRowError("Bitte ein gültiges Wertstellungsdatum wählen.")
         return
       }
 
       setTransactions((prev) =>
         prev.map((t) =>
           t.id === id
-            ? { ...t, description: editValues.description, amount: parsedAmount }
+            ? {
+                ...t,
+                description: editValues.description.trim(),
+                amount: parsedAmount,
+                booking_date: editValues.booking_date,
+                value_date: editValues.value_date,
+              }
             : t
         )
       )
@@ -193,6 +257,24 @@ export function TransactionPreviewTable({
           </Alert>
         )}
 
+        {rowError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{rowError}</AlertDescription>
+          </Alert>
+        )}
+
+        {activeTransactions.some(hasInvalidDates) && !editingId && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Mindestens eine Buchung enthält ein ungültiges Datum (rot
+              markiert). Bitte mit dem Stift-Symbol korrigieren, bevor du
+              speicherst — sonst lehnt die Datenbank den Kontoauszug ab.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {activeTransactions.length === 0 ? (
           <Alert>
             <AlertCircle className="h-4 w-4" />
@@ -245,20 +327,72 @@ export function TransactionPreviewTable({
                   }
 
                   const isEditing = editingId === tx.id
+                  const bookingInvalid = !isValidIsoDate(tx.booking_date)
+                  const valueInvalid = !isValidIsoDate(tx.value_date)
+                  const rowHasInvalidDate = hasInvalidDates(tx)
 
                   return (
                     <TableRow
                       key={tx.id}
                       className={cn(
                         tx.isDuplicate &&
-                          "bg-orange-50 dark:bg-orange-950/20"
+                          "bg-orange-50 dark:bg-orange-950/20",
+                        rowHasInvalidDate &&
+                          !isEditing &&
+                          "bg-red-50 dark:bg-red-950/20"
                       )}
                     >
                       <TableCell className="font-mono text-sm">
-                        {formatDate(tx.booking_date)}
+                        {isEditing ? (
+                          <Input
+                            type="date"
+                            value={editValues.booking_date}
+                            onChange={(e) =>
+                              setEditValues((prev) => ({
+                                ...prev,
+                                booking_date: e.target.value,
+                              }))
+                            }
+                            className="h-8 w-[140px]"
+                            aria-label="Buchungsdatum bearbeiten"
+                          />
+                        ) : (
+                          <span
+                            className={cn(
+                              bookingInvalid && "font-semibold text-red-600"
+                            )}
+                          >
+                            {bookingInvalid
+                              ? `⚠ ${tx.booking_date}`
+                              : formatDate(tx.booking_date)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-sm hidden sm:table-cell">
-                        {formatDate(tx.value_date)}
+                        {isEditing ? (
+                          <Input
+                            type="date"
+                            value={editValues.value_date}
+                            onChange={(e) =>
+                              setEditValues((prev) => ({
+                                ...prev,
+                                value_date: e.target.value,
+                              }))
+                            }
+                            className="h-8 w-[140px]"
+                            aria-label="Wertstellung bearbeiten"
+                          />
+                        ) : (
+                          <span
+                            className={cn(
+                              valueInvalid && "font-semibold text-red-600"
+                            )}
+                          >
+                            {valueInvalid
+                              ? `⚠ ${tx.value_date}`
+                              : formatDate(tx.value_date)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {isEditing ? (
