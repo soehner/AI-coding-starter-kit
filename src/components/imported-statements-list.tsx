@@ -24,8 +24,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Button } from "@/components/ui/button"
-import { AlertCircle, ExternalLink, FileText } from "lucide-react"
+import { buttonVariants } from "@/components/ui/button"
+import { AlertCircle, ExternalLink, FileText, FileWarning } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { isValidSeafileLink } from "@/lib/seafile-link"
 import type { BankStatement } from "@/lib/types"
 
 interface ImportedStatementsListProps {
@@ -152,32 +154,44 @@ export function ImportedStatementsList({
                       {formatDateTime(stmt.created_at)}
                     </TableCell>
                     <TableCell>
-                      {stmt.file_path ? (
+                      {isValidSeafileLink(stmt.file_path) ? (
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1 px-2 text-xs"
-                                asChild
+                              <a
+                                href={stmt.file_path}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`Kontoauszug ${stmt.file_name} anschauen`}
+                                className={cn(
+                                  buttonVariants({ variant: "outline", size: "sm" }),
+                                  "h-7 gap-1 px-2 text-xs"
+                                )}
                               >
-                                <a
-                                  href={stmt.file_path}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  aria-label={`Kontoauszug ${stmt.file_name} anschauen`}
-                                >
-                                  <ExternalLink className="h-3 w-3" />
-                                  Anschauen
-                                </a>
-                              </Button>
+                                <ExternalLink className="h-3 w-3" />
+                                Anschauen
+                              </a>
                             </TooltipTrigger>
                             <TooltipContent>Kontoauszug in Seafile öffnen</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className="inline-flex h-7 items-center gap-1 rounded-md border border-dashed px-2 text-xs text-muted-foreground"
+                                aria-label="Kontoauszug nicht in Seafile verfügbar"
+                              >
+                                <FileWarning className="h-3 w-3" />
+                                Nicht verfügbar
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Upload auf Seafile ist beim Import fehlgeschlagen oder war nicht konfiguriert.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                     </TableCell>
                   </TableRow>

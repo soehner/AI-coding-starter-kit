@@ -39,6 +39,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { BelegUploadDialog } from "@/components/beleg-upload-dialog"
+import { isValidSeafileLink } from "@/lib/seafile-link"
 import type { Transaction, EditableTransactionField } from "@/lib/types"
 
 interface TransactionTableProps {
@@ -293,7 +294,7 @@ export function TransactionTable({
                       <TableCell className="hidden max-w-[120px] xl:table-cell">
                         <TooltipProvider>
                           <div className="flex items-center gap-1">
-                            {t.document_ref ? (
+                            {isValidSeafileLink(t.document_ref) ? (
                               <>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
@@ -302,6 +303,7 @@ export function TransactionTable({
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       aria-label="Beleg anschauen"
+                                      className="inline-flex"
                                     >
                                       <Badge
                                         variant="secondary"
@@ -370,27 +372,42 @@ export function TransactionTable({
 
                       {/* Kontoauszug-Referenz */}
                       <TableCell className="hidden max-w-[120px] xl:table-cell">
-                        {t.bank_statements?.file_path ? (
+                        {isValidSeafileLink(t.bank_statements?.file_path) ? (
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <a
-                                  href={t.bank_statements.file_path}
+                                  href={t.bank_statements!.file_path!}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   aria-label="Kontoauszug anschauen"
+                                  className="inline-flex"
                                 >
                                   <Badge
                                     variant="outline"
                                     className="cursor-pointer gap-1 hover:bg-muted"
                                   >
                                     <FileText className="h-3 w-3" />
-                                    {t.bank_statements.statement_number || t.statement_ref || "PDF"}
+                                    {t.bank_statements?.statement_number || t.statement_ref || "PDF"}
                                     <ExternalLink className="h-3 w-3" />
                                   </Badge>
                                 </a>
                               </TooltipTrigger>
                               <TooltipContent>Kontoauszug in Seafile öffnen</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : t.bank_statements?.statement_number ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="gap-1 opacity-60">
+                                  <FileText className="h-3 w-3" />
+                                  {t.bank_statements.statement_number}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Kontoauszug-Datei nicht in Seafile verfügbar
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         ) : (
@@ -400,7 +417,7 @@ export function TransactionTable({
                             canEdit={canEdit}
                             maxLength={255}
                             label="Kontoauszug-Referenz"
-                            placeholder={t.bank_statements?.statement_number || "Auszug-Ref."}
+                            placeholder="Auszug-Ref."
                           />
                         )}
                       </TableCell>
