@@ -10,6 +10,7 @@ import { TransactionFilterBar } from "@/components/transaction-filter-bar"
 import { TransactionTable } from "@/components/transaction-table"
 import { KassenbuchExportButton } from "@/components/kassenbuch-export-button"
 import { BulkKategorisierungDialog } from "@/components/bulk-kategorisierung-dialog"
+import { EingeschraenkteBetrachterBanner } from "@/components/eingeschraenkte-betrachter-banner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,12 @@ export default function DashboardPage() {
 
   // Seafile-Status
   const [seafileConfigured, setSeafileConfigured] = useState(false)
+
+  // PROJ-14: Kategorie-Einschränkung des aktuellen Benutzers
+  const [categoryAccess, setCategoryAccess] = useState<{
+    restricted: boolean
+    allowedCategories: Category[]
+  } | null>(null)
 
   // Filter-State aus URL-Parametern initialisieren
   const [year, setYear] = useState(searchParams.get("year") || "all")
@@ -94,6 +101,40 @@ export default function DashboardPage() {
       dir: sortDir,
     })
   }, [year, month, debouncedSearch, page, sortBy, sortDir, updateUrl])
+
+  // PROJ-14: Kategorie-Einschränkung des eingeloggten Benutzers laden
+  // (nur für Betrachter relevant – Admins erhalten vom Backend restricted: false)
+  useEffect(() => {
+    if (authLoading || !profile) return
+    if (isAdmin) {
+      setCategoryAccess({ restricted: false, allowedCategories: [] })
+      return
+    }
+
+    const loadAccess = async () => {
+      try {
+        const res = await fetch("/api/me/category-access", {
+          credentials: "include",
+        })
+        if (!res.ok) {
+          setCategoryAccess({ restricted: false, allowedCategories: [] })
+          return
+        }
+        const data = await res.json()
+        setCategoryAccess({
+          restricted: !!data.restricted,
+          allowedCategories: Array.isArray(data.allowedCategories)
+            ? (data.allowedCategories as Category[])
+            : [],
+        })
+      } catch {
+        // Bei Fehlern keinen Banner anzeigen – Fallback: keine Einschränkung
+        setCategoryAccess({ restricted: false, allowedCategories: [] })
+      }
+    }
+
+    loadAccess()
+  }, [authLoading, profile, isAdmin])
 
   // Seafile-Konfiguration prüfen (nur für Admins/Editoren)
   useEffect(() => {
@@ -410,6 +451,13 @@ export default function DashboardPage() {
           {profile?.email ? ` - ${profile.email}` : ""}
         </p>
       </div>
+
+      {/* PROJ-14: Hinweisbanner für eingeschränkte Betrachter */}
+      {categoryAccess?.restricted && (
+        <EingeschraenkteBetrachterBanner
+          allowedCategories={categoryAccess.allowedCategories}
+        />
+      )}
 
       {/* KPI-Karten */}
       {summaryError ? (

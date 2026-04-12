@@ -33,6 +33,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Checkbox } from "@/components/ui/checkbox"
 import { UserPermissionsPanel } from "@/components/user-permissions-panel"
+import { KategorieZugriffPanel } from "@/components/kategorie-zugriff-panel"
 import { AlertCircle, ChevronDown, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
 import type { UserRole, UserPermissions, PermissionKey } from "@/lib/types"
 
@@ -416,7 +417,7 @@ export function UsersTable({
                       </TableCell>
                     </TableRow>
 
-                    {/* Aufklapp-Bereich: Feature-Berechtigungen */}
+                    {/* Aufklapp-Bereich: Feature-Berechtigungen + PROJ-14 Kategorie-Zugriff */}
                     {canExpand && isExpanded && (
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableCell colSpan={7} className="p-0">
@@ -425,6 +426,10 @@ export function UsersTable({
                             userEmail={user.email}
                             permissions={user.permissions ?? null}
                             onPermissionChange={onPermissionChange}
+                          />
+                          <KategorieZugriffPanel
+                            userId={user.id}
+                            userEmail={user.email}
                           />
                         </TableCell>
                       </TableRow>

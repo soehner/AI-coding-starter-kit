@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { getCategoryFilter } from "@/lib/category-access"
 import { z } from "zod"
 
 const PAGE_SIZE = 50
@@ -64,6 +65,22 @@ export async function GET(request: Request) {
       )
     }
 
+    // PROJ-14: Kategorie-Einschränkung des Benutzers ermitteln
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: "Profil nicht gefunden" },
+        { status: 404 }
+      )
+    }
+
+    const accessFilter = await getCategoryFilter(profile.id, profile.role)
+
     const { searchParams } = new URL(request.url)
     const rawParams = {
       year: searchParams.get("year") || undefined,
@@ -110,41 +127,55 @@ export async function GET(request: Request) {
       }
     }
 
-    // --- Kategorie-Vorfilter: erlaubte Transaktions-IDs bestimmen ---
-    // Wir ermitteln einmalig, welche Transaktions-IDs dem Kategorie-Filter
-    // entsprechen, und schränken die Hauptquery darauf ein (serverseitig).
-    let allowedTxIds: string[] | null = null
+    // --- Effektiven Kategorie-Filter bestimmen ---
+    //
+    // Zwei Quellen können eine Einschränkung verursachen:
+    //   1. Der Kategorie-Filter aus dem Query-String (wantCategoryIds +
+    //      wantUncategorized)
+    //   2. Die PROJ-14-Zugriffseinschränkung (accessFilter)
+    //
+    // Wir lösen beides ohne Vorab-Auflösung von Transaktions-IDs, indem wir
+    // auf `transaction_categories.category_id` filtern (Schnittmenge der
+    // Listen SQL-seitig via JOIN). Damit bleibt die URL stets kurz — die
+    // Anzahl der Kategorien pro Benutzer ist klein, anders als die Anzahl
+    // der zugeordneten Buchungen.
+    //
+    // Nur der Sonderfall "wantUncategorized" erfordert weiterhin einen
+    // Vorab-Lookup, weil PostgREST nicht nativ nach "fehlender Kind-Row"
+    // filtern kann — dieser Pfad wird aber für eingeschränkte Betrachter
+    // komplett blockiert (unkategorisierte Buchungen sind nicht sichtbar).
 
-    if (categoryFilterValues.length > 0) {
-      allowedTxIds = []
+    let effectiveCategoryIds: string[] | null = null
+    let uncategorizedIds: string[] | null = null
+    let forceEmpty = false
 
+    if (accessFilter.restricted) {
+      // Eingeschränkte Betrachter: unkategorisierte Buchungen sind nicht
+      // sichtbar. Wenn sie sie explizit anfordern, wird dies ignoriert.
       if (wantCategoryIds.length > 0) {
-        const { data: matched, error: matchErr } = await supabase
-          .from("transaction_categories")
-          .select("transaction_id")
-          .in("category_id", wantCategoryIds)
-          .limit(100000)
-
-        if (matchErr) {
-          return NextResponse.json(
-            {
-              error:
-                "Fehler beim Kategorie-Filter: " + matchErr.message,
-            },
-            { status: 500 }
-          )
-        }
-
-        const ids = new Set(
-          (matched ?? []).map((r) => r.transaction_id as string)
+        const allowedSet = new Set(accessFilter.allowedCategoryIds)
+        effectiveCategoryIds = wantCategoryIds.filter((id) =>
+          allowedSet.has(id)
         )
-        allowedTxIds.push(...ids)
+        if (effectiveCategoryIds.length === 0) {
+          forceEmpty = true
+        }
+      } else if (wantUncategorized) {
+        // Nur "Ohne Kategorie" angefragt → für eingeschränkte Betrachter
+        // nichts sichtbar.
+        forceEmpty = true
+      } else {
+        effectiveCategoryIds = accessFilter.allowedCategoryIds
+        if (effectiveCategoryIds.length === 0) {
+          forceEmpty = true
+        }
       }
-
+    } else {
+      // Uneingeschränkte Benutzer: bestehendes Verhalten.
+      if (wantCategoryIds.length > 0) {
+        effectiveCategoryIds = wantCategoryIds
+      }
       if (wantUncategorized) {
-        // BUG-005 Fix: Statt zweier limit(100000)-Queries die SQL-Funktion
-        // uncategorized_transaction_ids nutzen, die Filterung per WHERE NOT EXISTS
-        // direkt in der Datenbank ausführt.
         const { data: uncat, error: uncatErr } = await supabase.rpc(
           "uncategorized_transaction_ids",
           {
@@ -164,15 +195,69 @@ export async function GET(request: Request) {
           )
         }
 
-        for (const row of (uncat ?? []) as Array<{ id: string }>) {
-          allowedTxIds.push(row.id)
-        }
+        uncategorizedIds = (uncat ?? []).map(
+          (row: { id: string }) => row.id
+        )
+      }
+    }
+
+    if (forceEmpty) {
+      return NextResponse.json({
+        transactions: [],
+        total: 0,
+        page,
+        pageSize: PAGE_SIZE,
+        totalPages: 0,
+      })
+    }
+
+    // Wenn kombiniert: uncategorized + wantCategoryIds (uneingeschränkt),
+    // erzeugt jeder Pfad unterschiedliche Transaktionen. Wir müssen beide
+    // Mengen per OR vereinen. Der einfachste Weg: Vorab-IDs für den
+    // uncategorized-Teil + Filter auf category_id für den Rest. Da PostgREST
+    // kein natives OR über JOIN-Filter bietet, fallen wir für diesen Misch-
+    // Fall zurück auf Vorab-ID-Auflösung. Betrifft nur Admins/Uneingeschränkte
+    // und ist vom PROJ-14-Leak unberührt.
+    let allowedTxIds: string[] | null = null
+    if (
+      uncategorizedIds !== null &&
+      effectiveCategoryIds !== null &&
+      effectiveCategoryIds.length > 0
+    ) {
+      const { data: matched, error: matchErr } = await supabase
+        .from("transaction_categories")
+        .select("transaction_id")
+        .in("category_id", effectiveCategoryIds)
+        .limit(100000)
+
+      if (matchErr) {
+        return NextResponse.json(
+          { error: "Fehler beim Kategorie-Filter: " + matchErr.message },
+          { status: 500 }
+        )
       }
 
-      // Duplikate entfernen
-      allowedTxIds = Array.from(new Set(allowedTxIds))
+      const idSet = new Set<string>(uncategorizedIds)
+      for (const row of matched ?? []) {
+        idSet.add(row.transaction_id as string)
+      }
+      allowedTxIds = Array.from(idSet)
+      // Der category-Filter wird jetzt über allowedTxIds abgebildet,
+      // daher den join-basierten Filter deaktivieren.
+      effectiveCategoryIds = null
 
-      // Leere Ergebnismenge direkt zurückgeben
+      if (allowedTxIds.length === 0) {
+        return NextResponse.json({
+          transactions: [],
+          total: 0,
+          page,
+          pageSize: PAGE_SIZE,
+          totalPages: 0,
+        })
+      }
+    } else if (uncategorizedIds !== null) {
+      // Nur uncategorized (uneingeschränkt)
+      allowedTxIds = uncategorizedIds
       if (allowedTxIds.length === 0) {
         return NextResponse.json({
           transactions: [],
@@ -184,6 +269,17 @@ export async function GET(request: Request) {
       }
     }
 
+    // Wenn die Hauptquery den Kategorie-Filter per JOIN anwenden soll,
+    // nutzen wir !inner — dadurch werden Buchungen OHNE passende Kategorie
+    // zuverlässig ausgeschlossen, ohne eine potenziell riesige ID-Liste über
+    // die URL zu schicken.
+    const useCategoryJoin =
+      effectiveCategoryIds !== null && effectiveCategoryIds.length > 0
+
+    const categoryJoinSelect = useCategoryJoin
+      ? "transaction_categories!inner(category:categories(id, name, color, created_at))"
+      : "transaction_categories(category:categories(id, name, color, created_at))"
+
     // --- Hauptquery ---
     let query = supabase
       .from("transactions")
@@ -193,6 +289,7 @@ export async function GET(request: Request) {
         booking_date,
         value_date,
         description,
+        counterpart,
         amount,
         balance_after,
         category,
@@ -203,12 +300,17 @@ export async function GET(request: Request) {
         updated_by,
         statement_id,
         bank_statements!inner(statement_number, file_name, file_path),
-        transaction_categories(
-          category:categories(id, name, color, created_at)
-        )
+        ${categoryJoinSelect}
       `,
         { count: "exact" }
       )
+
+    if (useCategoryJoin) {
+      query = query.in(
+        "transaction_categories.category_id",
+        effectiveCategoryIds as string[]
+      )
+    }
 
     // Filter
     if (year) {

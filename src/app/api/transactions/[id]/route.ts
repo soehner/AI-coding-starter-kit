@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { requirePermission } from "@/lib/require-permission"
+import {
+  getCategoryFilter,
+  isTransactionVisible,
+} from "@/lib/category-access"
 import { z } from "zod"
 
 const isoDate = z
@@ -111,6 +115,23 @@ export async function PATCH(
         { error: "Buchung nicht gefunden" },
         { status: 404 }
       )
+    }
+
+    // PROJ-14: Sichtbarkeit der Buchung für eingeschränkte Betrachter prüfen.
+    // Wenn die Buchung nicht in den erlaubten Kategorien liegt, geben wir
+    // bewusst 404 zurück (nicht 403), um keine Informationen preiszugeben.
+    const accessFilter = await getCategoryFilter(
+      auth.profile.id,
+      auth.profile.role
+    )
+    if (accessFilter.restricted) {
+      const visible = await isTransactionVisible(id, accessFilter)
+      if (!visible) {
+        return NextResponse.json(
+          { error: "Buchung nicht gefunden" },
+          { status: 404 }
+        )
+      }
     }
 
     // Update durchführen mit Audit-Feldern

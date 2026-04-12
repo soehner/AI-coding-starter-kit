@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { getCategoryFilter } from "@/lib/category-access"
 import { z } from "zod"
 
 const summaryQuerySchema = z.object({
@@ -33,6 +34,36 @@ export async function GET(request: Request) {
       )
     }
 
+    // PROJ-14: Kategorie-Einschränkung des Benutzers ermitteln
+    const { data: profile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { error: "Profil nicht gefunden" },
+        { status: 404 }
+      )
+    }
+
+    const accessFilter = await getCategoryFilter(profile.id, profile.role)
+    const categoryFilterParam = accessFilter.restricted
+      ? accessFilter.allowedCategoryIds
+      : null
+
+    // Wenn ein eingeschränkter Benutzer keine erlaubten Kategorien hat,
+    // geben wir direkt Nullen zurück (keine Buchungen sichtbar).
+    if (accessFilter.restricted && accessFilter.allowedCategoryIds.length === 0) {
+      return NextResponse.json({
+        currentBalance: 0,
+        totalIncome: 0,
+        totalExpenses: 0,
+        availableYears: [],
+      })
+    }
+
     const { searchParams } = new URL(request.url)
     const rawParams = {
       year: searchParams.get("year") || undefined,
@@ -51,28 +82,61 @@ export async function GET(request: Request) {
     const { year, month, search } = validation.data
 
     // 1. Verfügbare Jahre per SQL DISTINCT abfragen (BUG-5 Fix)
-    const { data: yearsData, error: yearsError } = await supabase
-      .rpc("get_available_years")
+    let availableYears: string[] = []
 
-    if (yearsError) {
-      return NextResponse.json(
-        { error: "Fehler beim Laden der Jahre: " + yearsError.message },
-        { status: 500 }
+    if (categoryFilterParam === null) {
+      const { data: yearsData, error: yearsError } = await supabase
+        .rpc("get_available_years")
+
+      if (yearsError) {
+        return NextResponse.json(
+          { error: "Fehler beim Laden der Jahre: " + yearsError.message },
+          { status: 500 }
+        )
+      }
+
+      availableYears = (yearsData || []).map(
+        (row: { year: string }) => row.year
       )
+    } else {
+      // PROJ-14: Für eingeschränkte Benutzer nur Jahre aus sichtbaren Buchungen
+      const { data: visibleYearsRows, error: visibleYearsError } =
+        await supabase
+          .from("transactions")
+          .select("booking_date, transaction_categories!inner(category_id)")
+          .in(
+            "transaction_categories.category_id",
+            categoryFilterParam
+          )
+          .order("booking_date", { ascending: false })
+          .limit(10000)
+
+      if (visibleYearsError) {
+        return NextResponse.json(
+          {
+            error:
+              "Fehler beim Laden der Jahre: " + visibleYearsError.message,
+          },
+          { status: 500 }
+        )
+      }
+
+      const years = new Set<string>()
+      for (const row of (visibleYearsRows ?? []) as Array<{
+        booking_date: string
+      }>) {
+        if (row.booking_date) {
+          years.add(row.booking_date.substring(0, 4))
+        }
+      }
+      availableYears = Array.from(years).sort((a, b) => b.localeCompare(a))
     }
 
-    const availableYears = (yearsData || []).map(
-      (row: { year: string }) => row.year
+    // 2. Gesamtsaldo (aktuellste Buchung) — PROJ-14: gefiltert via RPC
+    const { data: balanceData, error: latestError } = await supabase.rpc(
+      "get_current_balance",
+      { p_category_filter: categoryFilterParam }
     )
-
-    // 2. Gesamtsaldo (aktuellste Buchung)
-    const { data: latestTransaction, error: latestError } = await supabase
-      .from("transactions")
-      .select("balance_after")
-      .order("booking_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
 
     if (latestError) {
       return NextResponse.json(
@@ -81,14 +145,15 @@ export async function GET(request: Request) {
       )
     }
 
-    const currentBalance = latestTransaction?.balance_after ?? 0
+    const currentBalance = balanceData ?? 0
 
-    // 3. Summen per SQL-Aggregation berechnen (BUG-6 Fix)
+    // 3. Summen per SQL-Aggregation berechnen (BUG-6 Fix, PROJ-14 erweitert)
     const { data: sumsData, error: sumError } = await supabase
       .rpc("get_transaction_sums", {
         p_year: year ? parseInt(year, 10) : null,
         p_month: month ? parseInt(month, 10) : null,
         p_search: search || null,
+        p_category_filter: categoryFilterParam,
       })
 
     if (sumError) {

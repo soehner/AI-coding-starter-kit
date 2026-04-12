@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requirePermission } from "@/lib/require-permission"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
+import { getCategoryFilter } from "@/lib/category-access"
 import { z } from "zod"
 import ExcelJS from "exceljs"
 
@@ -64,6 +65,15 @@ export async function GET(request: Request) {
     const authResult = await requirePermission("export_excel")
     if (authResult.error) return authResult.error
 
+    // PROJ-14: Kategorie-Einschränkung des Benutzers
+    const accessFilter = await getCategoryFilter(
+      authResult.profile.id,
+      authResult.profile.role
+    )
+    const accessCategoryFilter = accessFilter.restricted
+      ? accessFilter.allowedCategoryIds
+      : null
+
     // Query-Parameter validieren
     const { searchParams } = new URL(request.url)
     const rawParams = {
@@ -88,14 +98,25 @@ export async function GET(request: Request) {
 
     const supabase = await createServerSupabaseClient()
 
+    // Wenn ein eingeschränkter Betrachter keine erlaubten Kategorien hat,
+    // liefern wir direkt eine leere Ergebnismenge zurück — ohne Query.
+    const restrictedWithNoAccess =
+      accessCategoryFilter !== null && accessCategoryFilter.length === 0
+
     // --- Hauptabfrage: Buchungen im Filterzeitraum ---
+    // PROJ-14: Für eingeschränkte Betrachter filtern wir serverseitig per
+    // !inner-JOIN auf transaction_categories.category_id. So bleibt die URL
+    // stets kurz, egal wie viele Buchungen der Benutzer letztlich sehen darf.
+    const categoryJoinSelect =
+      accessCategoryFilter !== null
+        ? "transaction_categories!inner(category:categories(id, name))"
+        : "transaction_categories(category:categories(id, name))"
+
     let query = supabase
       .from("transactions")
       .select(
         `id, booking_date, value_date, description, amount, balance_after, category, note, document_ref, statement_ref,
-         transaction_categories(
-           category:categories(id, name)
-         )`
+         ${categoryJoinSelect}`
       )
       .order("booking_date", { ascending: true })
       .order("id", { ascending: true })
@@ -111,7 +132,16 @@ export async function GET(request: Request) {
       query = query.ilike("description", `%${search}%`)
     }
 
-    const { data: transactions, error: txError } = await query
+    if (accessCategoryFilter !== null && accessCategoryFilter.length > 0) {
+      query = query.in(
+        "transaction_categories.category_id",
+        accessCategoryFilter
+      )
+    }
+
+    const { data: transactions, error: txError } = restrictedWithNoAccess
+      ? { data: [], error: null }
+      : await query
 
     if (txError) {
       return NextResponse.json(
@@ -144,22 +174,36 @@ export async function GET(request: Request) {
     })
 
     // --- Eröffnungssaldo berechnen ---
+    //
+    // PROJ-14 BUG-1 Fix: Für eingeschränkte Betrachter darf der
+    // Eröffnungssaldo NICHT der echte Kontostand sein (balance_after kumuliert
+    // in der DB alle Transaktionen und würde den realen Saldo preisgeben).
+    // Die SQL-Funktion get_opening_balance liefert für eingeschränkte
+    // Betrachter stattdessen die SUMME der sichtbaren Buchungen vor dem
+    // Zeitraum — ein virtueller Saldo ohne Info-Leak.
     let openingBalance = 0
 
-    if (dateRange) {
-      // Letzter Eintrag VOR dem Filterzeitraum
-      const { data: priorEntry } = await supabase
-        .from("transactions")
-        .select("balance_after")
-        .lt("booking_date", dateRange.startDate)
-        .order("booking_date", { ascending: false })
-        .order("id", { ascending: false })
-        .limit(1)
-        .single()
+    if (dateRange && !restrictedWithNoAccess) {
+      const { data: openingData, error: openingError } = await supabase.rpc(
+        "get_opening_balance",
+        {
+          p_before_date: dateRange.startDate,
+          p_category_filter: accessCategoryFilter,
+        }
+      )
 
-      if (priorEntry) {
-        openingBalance = priorEntry.balance_after
+      if (openingError) {
+        return NextResponse.json(
+          {
+            error:
+              "Fehler beim Laden des Eröffnungssaldos: " +
+              openingError.message,
+          },
+          { status: 500 }
+        )
       }
+
+      openingBalance = Number(openingData ?? 0)
     }
 
     // --- Kennzahlen berechnen ---
@@ -174,8 +218,16 @@ export async function GET(request: Request) {
       }
     }
 
+    // PROJ-14 BUG-1 Fix: Für eingeschränkte Betrachter berechnen wir den
+    // Schlusssaldo ebenfalls virtuell (Opening + Einnahmen − Ausgaben). Der
+    // `balance_after` der letzten sichtbaren Buchung würde den echten
+    // Kontostand enthalten und damit die Einschränkung aushebeln.
     const closingBalance =
-      rows.length > 0 ? rows[rows.length - 1].balance_after : openingBalance
+      accessCategoryFilter !== null
+        ? openingBalance + totalIncome - totalExpense
+        : rows.length > 0
+          ? rows[rows.length - 1].balance_after
+          : openingBalance
 
     // --- Excel-Datei erstellen ---
     const workbook = new ExcelJS.Workbook()
