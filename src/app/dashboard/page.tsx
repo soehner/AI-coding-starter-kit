@@ -23,6 +23,9 @@ export default function DashboardPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  // Seafile-Status
+  const [seafileConfigured, setSeafileConfigured] = useState(false)
+
   // Filter-State aus URL-Parametern initialisieren
   const [year, setYear] = useState(searchParams.get("year") || "all")
   const [month, setMonth] = useState(searchParams.get("month") || "all")
@@ -80,6 +83,27 @@ export default function DashboardPage() {
       dir: sortDir,
     })
   }, [year, month, debouncedSearch, page, sortBy, sortDir, updateUrl])
+
+  // Seafile-Konfiguration prüfen (nur für Admins/Editoren)
+  useEffect(() => {
+    if (authLoading || !hasPermission("edit_transactions")) return
+
+    const checkSeafile = async () => {
+      try {
+        const res = await fetch("/api/admin/settings")
+        if (res.ok) {
+          const data = await res.json()
+          setSeafileConfigured(
+            !!(data.seafile_url && data.hasSeafileToken && data.seafile_repo_id)
+          )
+        }
+      } catch {
+        // Seafile-Status bleibt false
+      }
+    }
+
+    checkSeafile()
+  }, [authLoading, hasPermission])
 
   // Summary laden
   useEffect(() => {
@@ -200,6 +224,19 @@ export default function DashboardPage() {
     [transactions]
   )
 
+  // PROJ-9: Handler für Beleg-Upload - aktualisiert document_ref lokal
+  const handleDocumentUploaded = useCallback(
+    (transactionId: string, documentRef: string) => {
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.id === transactionId ? { ...t, document_ref: documentRef } : t
+        )
+      )
+      toast.success("Beleg hochgeladen")
+    },
+    []
+  )
+
   // Filter-Handler
   const handleYearChange = (value: string) => {
     setYear(value)
@@ -317,9 +354,11 @@ export default function DashboardPage() {
         sortBy={sortBy}
         sortDir={sortDir}
         canEdit={hasPermission("edit_transactions")}
+        seafileConfigured={seafileConfigured}
         onSort={handleSort}
         onPageChange={handlePageChange}
         onUpdateTransaction={handleUpdateTransaction}
+        onDocumentUploaded={handleDocumentUploaded}
       />
     </div>
   )

@@ -105,7 +105,7 @@ export async function PATCH(
         updated_at,
         updated_by,
         statement_id,
-        bank_statements!inner(statement_number, file_name)
+        bank_statements!inner(statement_number, file_name, file_path)
       `
       )
       .single()

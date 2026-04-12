@@ -14,7 +14,7 @@ export async function GET() {
   // 1. Profile mit Berechtigungen aus der Datenbank laden (Join statt N+1)
   const { data: profiles, error: profilesError } = await adminClient
     .from("user_profiles")
-    .select("id, email, role, created_at, user_permissions(edit_transactions, export_excel, import_statements, updated_at)")
+    .select("id, email, role, created_at, ist_vorstand, ist_zweiter_vorstand, user_permissions(edit_transactions, export_excel, import_statements, updated_at)")
     .order("created_at", { ascending: true })
     .limit(100)
 

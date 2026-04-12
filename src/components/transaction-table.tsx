@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useCallback } from "react"
 import {
   Table,
   TableBody,
@@ -16,11 +17,28 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, ArrowUpDown, ArrowUp, ArrowDown, FileText } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import {
+  AlertCircle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  FileText,
+  Upload,
+  ExternalLink,
+  Paperclip,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { InlineEditField } from "@/components/inline-edit-field"
+import { BelegUploadDialog } from "@/components/beleg-upload-dialog"
 import type { Transaction, EditableTransactionField } from "@/lib/types"
 
 interface TransactionTableProps {
@@ -32,9 +50,11 @@ interface TransactionTableProps {
   sortBy: string
   sortDir: string
   canEdit: boolean
+  seafileConfigured?: boolean
   onSort: (field: string) => void
   onPageChange: (page: number) => void
   onUpdateTransaction?: (id: string, field: EditableTransactionField, value: string) => Promise<void>
+  onDocumentUploaded?: (transactionId: string, documentRef: string) => void
 }
 
 function formatCurrency(value: number): string {
@@ -99,10 +119,29 @@ export function TransactionTable({
   sortBy,
   sortDir,
   canEdit,
+  seafileConfigured = false,
   onSort,
   onPageChange,
   onUpdateTransaction,
+  onDocumentUploaded,
 }: TransactionTableProps) {
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadTransaction, setUploadTransaction] = useState<Transaction | null>(null)
+
+  const handleOpenUploadDialog = useCallback((transaction: Transaction) => {
+    setUploadTransaction(transaction)
+    setUploadDialogOpen(true)
+  }, [])
+
+  const handleUploadComplete = useCallback(
+    (documentRef: string) => {
+      if (uploadTransaction && onDocumentUploaded) {
+        onDocumentUploaded(uploadTransaction.id, documentRef)
+      }
+    },
+    [uploadTransaction, onDocumentUploaded]
+  )
+
   if (error) {
     return (
       <Alert variant="destructive">
@@ -168,7 +207,7 @@ export function TransactionTable({
                 <TableHead className="w-[120px] text-right">Ausgabe</TableHead>
                 <TableHead className="w-[120px] text-right">Saldo</TableHead>
                 <TableHead className="hidden w-[180px] lg:table-cell">Bemerkung</TableHead>
-                <TableHead className="hidden w-[120px] xl:table-cell">Beleg-Ref.</TableHead>
+                <TableHead className="hidden w-[120px] xl:table-cell">Beleg</TableHead>
                 <TableHead className="hidden w-[100px] xl:table-cell">
                   <span className="flex items-center gap-1">
                     <FileText className="h-3 w-3" aria-hidden="true" />
@@ -250,28 +289,120 @@ export function TransactionTable({
                         />
                       </TableCell>
 
-                      {/* Beleg-Referenz - editierbar */}
+                      {/* Beleg - Upload/Anschauen */}
                       <TableCell className="hidden max-w-[120px] xl:table-cell">
-                        <InlineEditField
-                          value={t.document_ref || ""}
-                          onSave={(val) => handleFieldSave(t.id, "document_ref", val)}
-                          canEdit={canEdit}
-                          maxLength={255}
-                          label="Beleg-Referenz"
-                          placeholder="Beleg-Ref."
-                        />
+                        <TooltipProvider>
+                          <div className="flex items-center gap-1">
+                            {t.document_ref ? (
+                              <>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <a
+                                      href={t.document_ref}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      aria-label="Beleg anschauen"
+                                    >
+                                      <Badge
+                                        variant="secondary"
+                                        className="cursor-pointer gap-1 hover:bg-secondary/80"
+                                      >
+                                        <Paperclip className="h-3 w-3" />
+                                        Beleg
+                                        <ExternalLink className="h-3 w-3" />
+                                      </Badge>
+                                    </a>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Beleg in Seafile öffnen</TooltipContent>
+                                </Tooltip>
+                                {canEdit && seafileConfigured && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => handleOpenUploadDialog(t)}
+                                        aria-label="Beleg ersetzen"
+                                      >
+                                        <Upload className="h-3 w-3" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Beleg ersetzen</TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </>
+                            ) : canEdit && seafileConfigured ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                    onClick={() => handleOpenUploadDialog(t)}
+                                    aria-label="Beleg hochladen"
+                                  >
+                                    <Upload className="h-3 w-3" />
+                                    Hochladen
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Beleg zu Seafile hochladen</TooltipContent>
+                              </Tooltip>
+                            ) : !seafileConfigured && canEdit ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-muted-foreground">
+                                    —
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Bitte Seafile in den Einstellungen konfigurieren
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                —
+                              </span>
+                            )}
+                          </div>
+                        </TooltipProvider>
                       </TableCell>
 
-                      {/* Kontoauszug-Referenz - editierbar */}
+                      {/* Kontoauszug-Referenz */}
                       <TableCell className="hidden max-w-[120px] xl:table-cell">
-                        <InlineEditField
-                          value={t.statement_ref || ""}
-                          onSave={(val) => handleFieldSave(t.id, "statement_ref", val)}
-                          canEdit={canEdit}
-                          maxLength={255}
-                          label="Kontoauszug-Referenz"
-                          placeholder={t.bank_statements?.statement_number || "Auszug-Ref."}
-                        />
+                        {t.bank_statements?.file_path ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <a
+                                  href={t.bank_statements.file_path}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label="Kontoauszug anschauen"
+                                >
+                                  <Badge
+                                    variant="outline"
+                                    className="cursor-pointer gap-1 hover:bg-muted"
+                                  >
+                                    <FileText className="h-3 w-3" />
+                                    {t.bank_statements.statement_number || t.statement_ref || "PDF"}
+                                    <ExternalLink className="h-3 w-3" />
+                                  </Badge>
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent>Kontoauszug in Seafile öffnen</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <InlineEditField
+                            value={t.statement_ref || ""}
+                            onSave={(val) => handleFieldSave(t.id, "statement_ref", val)}
+                            canEdit={canEdit}
+                            maxLength={255}
+                            label="Kontoauszug-Referenz"
+                            placeholder={t.bank_statements?.statement_number || "Auszug-Ref."}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   )
@@ -340,6 +471,18 @@ export function TransactionTable({
             </PaginationContent>
           </Pagination>
         </div>
+      )}
+
+      {/* Beleg-Upload-Dialog */}
+      {uploadTransaction && (
+        <BelegUploadDialog
+          open={uploadDialogOpen}
+          onOpenChange={setUploadDialogOpen}
+          transactionId={uploadTransaction.id}
+          transactionDescription={uploadTransaction.description}
+          hasExistingDocument={!!uploadTransaction.document_ref}
+          onUploadComplete={handleUploadComplete}
+        />
       )}
     </div>
   )

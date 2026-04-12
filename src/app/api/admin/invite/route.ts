@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: firstError }, { status: 400 })
   }
 
-  const { email, role } = validation.data
+  const { email, role, ist_vorstand, ist_zweiter_vorstand } = validation.data
   const normalizedEmail = email.toLowerCase().trim()
 
   // 3. Prüfen ob E-Mail bereits existiert
@@ -83,6 +83,8 @@ export async function POST(request: Request) {
         id: inviteData.user.id,
         email: normalizedEmail,
         role: role,
+        ist_vorstand: ist_vorstand ?? false,
+        ist_zweiter_vorstand: ist_zweiter_vorstand ?? false,
       })
 
     if (updateError) {

@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { ApiSettingsForm } from "@/components/api-settings-form"
+import { SeafileSettingsForm } from "@/components/seafile-settings-form"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function AdminSettingsPage() {
@@ -37,12 +38,13 @@ export default function AdminSettingsPage() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold tracking-tight">Einstellungen</h2>
         <p className="text-sm text-muted-foreground">
-          Konfiguriere die KI-Integration für das PDF-Parsing.
+          Konfiguriere die KI-Integration und Seafile-Anbindung.
         </p>
       </div>
 
-      <div className="max-w-2xl">
+      <div className="max-w-2xl space-y-8">
         <ApiSettingsForm />
+        <SeafileSettingsForm />
       </div>
     </div>
   )

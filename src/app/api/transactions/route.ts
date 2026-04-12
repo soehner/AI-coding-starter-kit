@@ -90,7 +90,7 @@ export async function GET(request: Request) {
         updated_at,
         updated_by,
         statement_id,
-        bank_statements!inner(statement_number, file_name)
+        bank_statements!inner(statement_number, file_name, file_path)
       `,
         { count: "exact" }
       )

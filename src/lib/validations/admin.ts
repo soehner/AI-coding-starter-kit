@@ -8,6 +8,8 @@ export const inviteUserSchema = z.object({
   role: z.enum(["admin", "viewer"], {
     message: "Bitte eine Rolle auswählen.",
   }),
+  ist_vorstand: z.boolean().optional(),
+  ist_zweiter_vorstand: z.boolean().optional(),
 })
 
 export type InviteUserInput = z.infer<typeof inviteUserSchema>
@@ -19,6 +21,14 @@ export const updateRoleSchema = z.object({
 })
 
 export type UpdateRoleInput = z.infer<typeof updateRoleSchema>
+
+// PROJ-10: Zusatzrollen separat aktualisieren
+export const updateExtraRolesSchema = z.object({
+  ist_vorstand: z.boolean(),
+  ist_zweiter_vorstand: z.boolean(),
+})
+
+export type UpdateExtraRolesInput = z.infer<typeof updateExtraRolesSchema>
 
 // PROJ-7: Granulare Feature-Berechtigungen
 export const updatePermissionsSchema = z.object({

@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PasswordChangeDialog } from "@/components/password-change-dialog"
-import { FileUp, LogOut, Settings, Shield, User, Users, ClipboardList } from "lucide-react"
+import { CheckSquare, FileUp, LogOut, Settings, Shield, User, Users, ClipboardList } from "lucide-react"
 import Link from "next/link"
 
 function getInitials(email: string): string {
@@ -96,6 +96,12 @@ export function AppHeader() {
                   )}
                   {isAdmin && (
                     <>
+                      <DropdownMenuItem asChild>
+                        <Link href="/dashboard/admin/genehmigungen">
+                          <CheckSquare className="mr-2 h-4 w-4" />
+                          Genehmigungen
+                        </Link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/dashboard/admin/users">
                           <Users className="mr-2 h-4 w-4" />

@@ -2,6 +2,22 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/admin-auth"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { updateRoleSchema } from "@/lib/validations/admin"
+import { z } from "zod"
+
+// PROJ-10: Teil-Update für Zusatzrollen (ist_vorstand / ist_zweiter_vorstand)
+const patchBodySchema = z
+  .object({
+    role: z.enum(["admin", "viewer"]).optional(),
+    ist_vorstand: z.boolean().optional(),
+    ist_zweiter_vorstand: z.boolean().optional(),
+  })
+  .refine(
+    (v) =>
+      v.role !== undefined ||
+      v.ist_vorstand !== undefined ||
+      v.ist_zweiter_vorstand !== undefined,
+    { message: "Mindestens ein Feld muss angegeben werden." }
+  )
 
 // PATCH: Rolle ändern
 export async function PATCH(
@@ -45,15 +61,25 @@ export async function PATCH(
     )
   }
 
-  const validation = updateRoleSchema.safeParse(body)
+  const validation = patchBodySchema.safeParse(body)
   if (!validation.success) {
     const firstError =
       validation.error.issues[0]?.message ?? "Ungültige Eingabe."
     return NextResponse.json({ error: firstError }, { status: 400 })
   }
 
-  const { role } = validation.data
+  const { role, ist_vorstand, ist_zweiter_vorstand } = validation.data
   const adminClient = createAdminSupabaseClient()
+
+  // Update-Objekt dynamisch aufbauen
+  const updatePayload: Record<string, unknown> = {}
+  if (role !== undefined) updatePayload.role = role
+  if (ist_vorstand !== undefined) updatePayload.ist_vorstand = ist_vorstand
+  if (ist_zweiter_vorstand !== undefined)
+    updatePayload.ist_zweiter_vorstand = ist_zweiter_vorstand
+
+  // Stummer Lint-Guard (updateRoleSchema bleibt für andere Routen relevant)
+  void updateRoleSchema
 
   // 5. Prüfen ob der Zielbenutzer existiert
   const { data: targetProfile, error: targetError } = await adminClient
@@ -70,7 +96,7 @@ export async function PATCH(
   }
 
   // 6. Letzter-Admin-Schutz: Verhindern, dass der letzte Admin zum Betrachter degradiert wird
-  if (targetProfile.role === "admin" && role === "viewer") {
+  if (role !== undefined && targetProfile.role === "admin" && role === "viewer") {
     const { data: admins, error: countError } = await adminClient
       .from("user_profiles")
       .select("id")
@@ -94,21 +120,21 @@ export async function PATCH(
     }
   }
 
-  // 7. Rolle aktualisieren
+  // 7. Felder aktualisieren
   const { error: updateError } = await adminClient
     .from("user_profiles")
-    .update({ role })
+    .update(updatePayload)
     .eq("id", targetUserId)
 
   if (updateError) {
     console.error("Rollenänderungs-Fehler:", updateError.message)
     return NextResponse.json(
-      { error: "Rolle konnte nicht geändert werden." },
+      { error: "Felder konnten nicht aktualisiert werden." },
       { status: 500 }
     )
   }
 
-  return NextResponse.json({ message: "Rolle erfolgreich geändert." })
+  return NextResponse.json({ message: "Benutzer erfolgreich aktualisiert." })
 }
 
 // DELETE: Benutzer löschen

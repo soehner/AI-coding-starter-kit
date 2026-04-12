@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { UserPermissionsPanel } from "@/components/user-permissions-panel"
 import { AlertCircle, ChevronDown, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
@@ -44,6 +45,8 @@ export interface UserEntry {
   last_sign_in_at?: string | null
   permissions?: UserPermissions | null
   mfa_enabled?: boolean
+  ist_vorstand?: boolean
+  ist_zweiter_vorstand?: boolean
 }
 
 interface UsersTableProps {
@@ -54,6 +57,11 @@ interface UsersTableProps {
   onRoleChange: (userId: string, newRole: UserRole) => Promise<void>
   onDelete: (userId: string) => Promise<void>
   onPermissionChange?: (userId: string, permission: PermissionKey, value: boolean) => Promise<void>
+  onExtraRoleChange?: (
+    userId: string,
+    role: "ist_vorstand" | "ist_zweiter_vorstand",
+    value: boolean
+  ) => Promise<void>
 }
 
 function getRoleLabel(role: string): string {
@@ -93,11 +101,32 @@ export function UsersTable({
   onRoleChange,
   onDelete,
   onPermissionChange,
+  onExtraRoleChange,
 }: UsersTableProps) {
   const [updatingRole, setUpdatingRole] = useState<string | null>(null)
+  const [updatingExtraRole, setUpdatingExtraRole] = useState<string | null>(null)
   const [deletingUser, setDeletingUser] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
+
+  async function handleExtraRoleChange(
+    userId: string,
+    role: "ist_vorstand" | "ist_zweiter_vorstand",
+    value: boolean
+  ) {
+    if (!onExtraRoleChange) return
+    setUpdatingExtraRole(`${userId}-${role}`)
+    setActionError(null)
+    try {
+      await onExtraRoleChange(userId, role, value)
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Zusatzrolle konnte nicht geändert werden."
+      )
+    } finally {
+      setUpdatingExtraRole(null)
+    }
+  }
 
   async function handleRoleChange(userId: string, newRole: UserRole) {
     setUpdatingRole(userId)
@@ -186,6 +215,7 @@ export function UsersTable({
             <TableRow>
               <TableHead>E-Mail</TableHead>
               <TableHead>Rolle</TableHead>
+              <TableHead className="hidden lg:table-cell">Zusatzrollen</TableHead>
               <TableHead className="hidden sm:table-cell">Status</TableHead>
               <TableHead className="hidden md:table-cell">2FA</TableHead>
               <TableHead className="hidden md:table-cell">
@@ -277,6 +307,57 @@ export function UsersTable({
                           </Select>
                         )}
                       </TableCell>
+                      <TableCell
+                        className="hidden lg:table-cell"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {onExtraRoleChange && !isCurrentUser ? (
+                          <div className="flex flex-col gap-1">
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                              <Checkbox
+                                checked={user.ist_vorstand ?? false}
+                                onCheckedChange={(checked) =>
+                                  handleExtraRoleChange(
+                                    user.id,
+                                    "ist_vorstand",
+                                    checked === true
+                                  )
+                                }
+                                disabled={
+                                  updatingExtraRole === `${user.id}-ist_vorstand`
+                                }
+                                aria-label={`Vorstand-Rolle für ${user.email}`}
+                              />
+                              Vorstand
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                              <Checkbox
+                                checked={user.ist_zweiter_vorstand ?? false}
+                                onCheckedChange={(checked) =>
+                                  handleExtraRoleChange(
+                                    user.id,
+                                    "ist_zweiter_vorstand",
+                                    checked === true
+                                  )
+                                }
+                                disabled={
+                                  updatingExtraRole === `${user.id}-ist_zweiter_vorstand`
+                                }
+                                aria-label={`2. Vorstand-Rolle für ${user.email}`}
+                              />
+                              2. Vorstand
+                            </label>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                            {user.ist_vorstand && <span>Vorstand</span>}
+                            {user.ist_zweiter_vorstand && <span>2. Vorstand</span>}
+                            {!user.ist_vorstand && !user.ist_zweiter_vorstand && (
+                              <span>—</span>
+                            )}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell className="hidden sm:table-cell">
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </TableCell>
@@ -347,7 +428,7 @@ export function UsersTable({
                     {canExpand && (
                       <CollapsibleContent asChild>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableCell colSpan={6} className="p-0">
+                          <TableCell colSpan={7} className="p-0">
                             <UserPermissionsPanel
                               userId={user.id}
                               userEmail={user.email}

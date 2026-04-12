@@ -36,6 +36,8 @@ export default function AdminUsersPage() {
         created_at: string
         last_sign_in_at: string | null
         permissions?: UserPermissions | null
+        ist_vorstand?: boolean
+        ist_zweiter_vorstand?: boolean
       }>).map((u) => ({
         id: u.id,
         email: u.email,
@@ -43,6 +45,8 @@ export default function AdminUsersPage() {
         created_at: u.created_at,
         last_sign_in_at: u.last_sign_in_at,
         permissions: u.permissions ?? null,
+        ist_vorstand: u.ist_vorstand ?? false,
+        ist_zweiter_vorstand: u.ist_zweiter_vorstand ?? false,
       }))
 
       setUsers(userEntries)
@@ -141,6 +145,28 @@ export default function AdminUsersPage() {
     )
   }
 
+  async function handleExtraRoleChange(
+    userId: string,
+    role: "ist_vorstand" | "ist_zweiter_vorstand",
+    value: boolean
+  ) {
+    const response = await fetch(`/api/admin/users/${userId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [role]: value }),
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      throw new Error(data.error || "Zusatzrolle konnte nicht geändert werden.")
+    }
+
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, [role]: value } : u))
+    )
+  }
+
   async function handleDelete(userId: string) {
     const response = await fetch(`/api/admin/users/${userId}`, {
       method: "DELETE",
@@ -178,6 +204,7 @@ export default function AdminUsersPage() {
         onRoleChange={handleRoleChange}
         onDelete={handleDelete}
         onPermissionChange={handlePermissionChange}
+        onExtraRoleChange={handleExtraRoleChange}
       />
     </div>
   )

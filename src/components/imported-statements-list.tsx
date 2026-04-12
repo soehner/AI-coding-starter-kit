@@ -18,7 +18,14 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, FileText } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Button } from "@/components/ui/button"
+import { AlertCircle, ExternalLink, FileText } from "lucide-react"
 import type { BankStatement } from "@/lib/types"
 
 interface ImportedStatementsListProps {
@@ -119,6 +126,7 @@ export function ImportedStatementsList({
                   <TableHead className="hidden md:table-cell">
                     Importiert am
                   </TableHead>
+                  <TableHead className="w-[100px]">Aktion</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -142,6 +150,35 @@ export function ImportedStatementsList({
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground hidden md:table-cell">
                       {formatDateTime(stmt.created_at)}
+                    </TableCell>
+                    <TableCell>
+                      {stmt.file_path ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 gap-1 px-2 text-xs"
+                                asChild
+                              >
+                                <a
+                                  href={stmt.file_path}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`Kontoauszug ${stmt.file_name} anschauen`}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Anschauen
+                                </a>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Kontoauszug in Seafile öffnen</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

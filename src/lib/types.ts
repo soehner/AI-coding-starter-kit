@@ -5,6 +5,9 @@ export interface UserProfile {
   email: string
   role: UserRole
   created_at: string
+  // PROJ-10: Zusatzrollen für Genehmigungssystem (unabhängig von Hauptrolle)
+  ist_vorstand?: boolean
+  ist_zweiter_vorstand?: boolean
 }
 
 // PROJ-3: KI-Provider Typen
@@ -66,6 +69,7 @@ export interface Transaction {
   bank_statements: {
     statement_number: string
     file_name: string
+    file_path: string | null
   }
 }
 
@@ -125,6 +129,40 @@ export interface CostRequestApprover {
   approval_role: ApprovalRole
   user_id: string
   label: string
+}
+
+// PROJ-10: Genehmigungssystem
+export type ApprovalStatus = "offen" | "genehmigt" | "abgelehnt" | "entwurf"
+export type ApprovalLinkType = "und" | "oder"
+export type ApprovalRoleType = "vorstand" | "zweiter_vorstand"
+
+export interface ApprovalRequest {
+  id: string
+  created_by: string
+  created_by_email?: string
+  note: string
+  document_url: string
+  document_name: string
+  required_roles: ApprovalRoleType[]
+  link_type: ApprovalLinkType
+  status: ApprovalStatus
+  created_at: string
+  updated_at: string
+}
+
+export interface ApprovalDecision {
+  id: string
+  request_id: string
+  approver_id: string
+  approver_email?: string
+  approver_role: ApprovalRoleType
+  decision: "genehmigt" | "abgelehnt"
+  comment: string | null
+  decided_at: string
+}
+
+export interface ApprovalRequestWithDecisions extends ApprovalRequest {
+  approval_decisions: ApprovalDecision[]
 }
 
 // PROJ-5: Bearbeitbare Felder

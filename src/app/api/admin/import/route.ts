@@ -3,13 +3,14 @@ import { requirePermission } from "@/lib/require-permission"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { decrypt } from "@/lib/encryption"
 import { parseBankStatement } from "@/lib/ki-parser"
+import { loadSeafileConfig, uploadToSeafile, sanitizeFileName } from "@/lib/seafile"
 import type { KiProvider } from "@/lib/types"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB serverseitiges Limit
 
 /**
  * POST /api/admin/import
- * Nimmt ein PDF entgegen, lädt es in Supabase Storage hoch,
+ * Nimmt ein PDF entgegen, lädt es auf Seafile hoch (falls konfiguriert),
  * parst es mit der konfigurierten KI-API und gibt die erkannten Buchungen zurück.
  */
 export async function POST(request: Request) {
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
   if (file.size > MAX_FILE_SIZE) {
     return NextResponse.json(
       {
-        error: `Datei zu gross. Maximale Groesse: ${MAX_FILE_SIZE / 1024 / 1024} MB.`,
+        error: `Datei zu groß. Maximale Größe: ${MAX_FILE_SIZE / 1024 / 1024} MB.`,
       },
       { status: 400 }
     )
@@ -93,27 +94,41 @@ export async function POST(request: Request) {
   const arrayBuffer = await file.arrayBuffer()
   const pdfBuffer = Buffer.from(arrayBuffer)
 
-  // 5. PDF in Supabase Storage hochladen
-  const timestamp = Date.now()
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-  const storagePath = `statements/${timestamp}_${sanitizedName}`
+  // 5. PDF auf Seafile hochladen (statt Supabase Storage)
+  let filePath: string
+  let seafileWarning: string | undefined
 
-  const { error: uploadError } = await adminClient.storage
-    .from("bank-statements")
-    .upload(storagePath, pdfBuffer, {
-      contentType: "application/pdf",
-      upsert: false,
-    })
+  const seafileResult = await loadSeafileConfig(adminClient, decrypt)
 
-  if (uploadError) {
-    console.error("Storage-Upload-Fehler:", uploadError.message)
-    return NextResponse.json(
-      { error: "PDF konnte nicht gespeichert werden." },
-      { status: 500 }
-    )
+  if (seafileResult) {
+    try {
+      // Jahr aus Dateiname oder aktuelles Jahr
+      const year = new Date().getFullYear().toString()
+      const fileName = sanitizeFileName(file.name)
+
+      const uploadResult = await uploadToSeafile(
+        seafileResult.config,
+        seafileResult.statementPath,
+        year,
+        fileName,
+        pdfBuffer,
+        "application/pdf"
+      )
+
+      filePath = uploadResult.shareLink
+    } catch (err) {
+      console.error("Seafile-Upload-Fehler beim Import:", err)
+      // Fallback: Pfad als Warnung, Import geht weiter
+      seafileWarning = "Kontoauszug konnte nicht auf Seafile abgelegt werden."
+      filePath = `seafile_error:${file.name}`
+    }
+  } else {
+    // Seafile nicht konfiguriert — Warnung, aber Import funktioniert weiter
+    seafileWarning = "Kontoauszug konnte nicht auf Seafile abgelegt werden – Seafile ist nicht konfiguriert."
+    filePath = `no_seafile:${file.name}`
   }
 
-  // 6. Seitenanzahl prüfen (Warnung bei grossen PDFs)
+  // 6. Seitenanzahl prüfen (Warnung bei großen PDFs)
   const MAX_PAGES = 50
   let pageCount = 0
   try {
@@ -169,10 +184,11 @@ export async function POST(request: Request) {
     }))
   }
 
-  // 8. Datei-Informationen zur Antwort hinzufuegen
+  // 9. Datei-Informationen zur Antwort hinzufügen
   return NextResponse.json({
     ...result,
     file_name: file.name,
-    file_path: storagePath,
+    file_path: filePath,
+    ...(seafileWarning ? { seafile_warning: seafileWarning } : {}),
   })
 }

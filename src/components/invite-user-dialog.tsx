@@ -22,6 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -48,6 +49,8 @@ export function InviteUserDialog({ onInvited }: InviteUserDialogProps) {
     defaultValues: {
       email: "",
       role: "viewer",
+      ist_vorstand: false,
+      ist_zweiter_vorstand: false,
     },
   })
 
@@ -159,6 +162,50 @@ export function InviteUserDialog({ onInvited }: InviteUserDialogProps) {
                 </FormItem>
               )}
             />
+
+            {/* PROJ-10: Zusatzrollen für Genehmigungssystem */}
+            <div className="space-y-2">
+              <FormLabel>Zusatzrollen (optional)</FormLabel>
+              <p className="text-xs text-muted-foreground">
+                Genehmiger-Rollen für das Genehmigungssystem.
+              </p>
+              <FormField
+                control={form.control}
+                name="ist_vorstand"
+                render={({ field }) => (
+                  <FormItem className="flex items-center space-x-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value ?? false}
+                        onCheckedChange={field.onChange}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormLabel className="font-normal cursor-pointer">
+                      Vorstand
+                    </FormLabel>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="ist_zweiter_vorstand"
+                render={({ field }) => (
+                  <FormItem className="flex items-center space-x-2 space-y-0">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value ?? false}
+                        onCheckedChange={field.onChange}
+                        disabled={isSubmitting}
+                      />
+                    </FormControl>
+                    <FormLabel className="font-normal cursor-pointer">
+                      2. Vorstand
+                    </FormLabel>
+                  </FormItem>
+                )}
+              />
+            </div>
 
             {error && (
               <Alert variant="destructive">
