@@ -103,7 +103,8 @@ export default function AdminImportPage() {
     return null
   }
 
-  function handleParseComplete(result: ParsedStatementResult) {
+  function handleParseComplete(result: ParsedStatementResult, _fileName: string) {
+    void _fileName
     setParseResult(result)
     setSaveSuccess(null)
     setSeafileWarning(result.seafile_warning ?? null)
@@ -173,13 +174,15 @@ export default function AdminImportPage() {
       )}
 
       <div className="space-y-8">
-        {/* Upload-Bereich (versteckt wenn Vorschau aktiv) */}
-        {!parseResult && (
+        {/* Upload-Bereich — bleibt während der Vorschau gemountet,
+            damit die Multi-File-Queue nicht verloren geht. */}
+        <div className={parseResult ? "hidden" : ""}>
           <PdfUploadZone
             hasApiToken={hasApiToken}
             onParseComplete={handleParseComplete}
+            isPreviewActive={!!parseResult}
           />
-        )}
+        </div>
 
         {/* Vorschau-Tabelle */}
         {parseResult && (

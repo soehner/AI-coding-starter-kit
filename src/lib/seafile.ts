@@ -133,7 +133,32 @@ async function getUploadLink(config: SeafileConfig, dirPath: string): Promise<st
 }
 
 /**
+ * Holt einen bereits existierenden Share-Link für eine Datei, falls vorhanden.
+ * Seafile erlaubt pro Datei-Content nur einen Share-Link; bei Duplikat-Uploads
+ * bleibt der alte Link bestehen, selbst wenn die Datei zwischenzeitlich gelöscht
+ * und neu hochgeladen wurde.
+ */
+async function findExistingShareLink(
+  config: SeafileConfig,
+  filePath: string
+): Promise<string | null> {
+  const url = `${config.url}/api/v2.1/share-links/?repo_id=${config.repoId}&path=${encodeURIComponent(filePath)}`
+  const res = await fetch(url, {
+    headers: { Authorization: `Token ${config.token}` },
+  })
+
+  if (!res.ok) return null
+
+  const data = await res.json()
+  if (Array.isArray(data) && data.length > 0 && typeof data[0].link === "string") {
+    return data[0].link
+  }
+  return null
+}
+
+/**
  * Erstellt einen öffentlichen Share-Link für eine Datei.
+ * Fällt bei „Share link already exists" auf den bestehenden Link zurück.
  */
 async function createShareLink(
   config: SeafileConfig,
@@ -151,13 +176,27 @@ async function createShareLink(
     }),
   })
 
-  if (!res.ok) {
-    const errorText = await res.text()
-    throw new Error(`Share-Link konnte nicht erstellt werden: ${res.status} ${errorText}`)
+  if (res.ok) {
+    const data = await res.json()
+    return data.link as string
   }
 
-  const data = await res.json()
-  return data.link as string
+  // 400 + "already exists" → bestehenden Link abrufen und zurückgeben
+  if (res.status === 400) {
+    const errorText = await res.text()
+    if (errorText.toLowerCase().includes("already exists")) {
+      const existing = await findExistingShareLink(config, filePath)
+      if (existing) return existing
+    }
+    throw new Error(
+      `Share-Link konnte nicht erstellt werden: ${res.status} ${errorText}`
+    )
+  }
+
+  const errorText = await res.text()
+  throw new Error(
+    `Share-Link konnte nicht erstellt werden: ${res.status} ${errorText}`
+  )
 }
 
 /**
