@@ -41,18 +41,31 @@ export async function GET() {
     )
   }
 
-  // 3. Auth-Daten mit Profilen zusammenführen
+  // 3. Auth-Daten mit Profilen zusammenführen (inkl. MFA-Status)
   const authMap = new Map(
-    authData.users.map((u) => [u.id, u.last_sign_in_at])
+    authData.users.map((u) => [
+      u.id,
+      {
+        last_sign_in_at: u.last_sign_in_at,
+        mfa_enabled: (u.factors ?? []).some(
+          (f: { status: string; factor_type: string }) =>
+            f.factor_type === "totp" && f.status === "verified"
+        ),
+      },
+    ])
   )
 
-  const users = profiles.map((p) => ({
-    ...p,
-    // user_permissions ist ein Objekt (1:1-Beziehung) oder null
-    permissions: p.user_permissions ?? null,
-    user_permissions: undefined,
-    last_sign_in_at: authMap.get(p.id) ?? null,
-  }))
+  const users = profiles.map((p) => {
+    const authInfo = authMap.get(p.id)
+    return {
+      ...p,
+      // user_permissions ist ein Objekt (1:1-Beziehung) oder null
+      permissions: p.user_permissions ?? null,
+      user_permissions: undefined,
+      last_sign_in_at: authInfo?.last_sign_in_at ?? null,
+      mfa_enabled: authInfo?.mfa_enabled ?? false,
+    }
+  })
 
   return NextResponse.json(users)
 }

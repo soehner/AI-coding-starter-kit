@@ -33,7 +33,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { UserPermissionsPanel } from "@/components/user-permissions-panel"
-import { AlertCircle, ChevronDown, Loader2, Trash2 } from "lucide-react"
+import { AlertCircle, ChevronDown, Loader2, ShieldCheck, ShieldOff, Trash2 } from "lucide-react"
 import type { UserRole, UserPermissions, PermissionKey } from "@/lib/types"
 
 export interface UserEntry {
@@ -43,6 +43,7 @@ export interface UserEntry {
   created_at: string
   last_sign_in_at?: string | null
   permissions?: UserPermissions | null
+  mfa_enabled?: boolean
 }
 
 interface UsersTableProps {
@@ -186,6 +187,7 @@ export function UsersTable({
               <TableHead>E-Mail</TableHead>
               <TableHead>Rolle</TableHead>
               <TableHead className="hidden sm:table-cell">Status</TableHead>
+              <TableHead className="hidden md:table-cell">2FA</TableHead>
               <TableHead className="hidden md:table-cell">
                 Registriert am
               </TableHead>
@@ -279,6 +281,19 @@ export function UsersTable({
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
+                        {user.mfa_enabled ? (
+                          <Badge variant="default" className="bg-green-600 hover:bg-green-700 gap-1">
+                            <ShieldCheck className="h-3 w-3" />
+                            Aktiv
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground">
+                            <ShieldOff className="h-3 w-3" />
+                            Inaktiv
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
                         {formatDate(user.created_at)}
                       </TableCell>
                       <TableCell className="text-right">
@@ -332,7 +347,7 @@ export function UsersTable({
                     {canExpand && (
                       <CollapsibleContent asChild>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableCell colSpan={5} className="p-0">
+                          <TableCell colSpan={6} className="p-0">
                             <UserPermissionsPanel
                               userId={user.id}
                               userEmail={user.email}

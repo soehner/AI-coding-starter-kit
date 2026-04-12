@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod/v4"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { createClient } from "@/lib/supabase"
+import { MfaVerifizierung } from "@/components/mfa-verifizierung"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -44,6 +45,10 @@ export function LoginForm({ callbackError }: LoginFormProps) {
       ? "Der Verifizierungslink ist abgelaufen oder ungültig. Bitte fordern Sie einen neuen an."
       : null
   )
+  // 2FA-Zustand
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null)
+  const [showMfaStep, setShowMfaStep] = useState(false)
+
   const supabase = createClient()
 
   const form = useForm<LoginFormValues>({
@@ -81,6 +86,21 @@ export function LoginForm({ callbackError }: LoginFormProps) {
       }
 
       if (data.session) {
+        // Prüfen, ob der Benutzer 2FA aktiviert hat
+        const { data: mfaData } = await supabase.auth.mfa.listFactors()
+        const verifiedFactor = mfaData?.totp?.find(
+          (f: { status: string }) => f.status === "verified"
+        )
+
+        if (verifiedFactor) {
+          // 2FA ist aktiv – Schritt 2 anzeigen
+          setMfaFactorId(verifiedFactor.id)
+          setShowMfaStep(true)
+          setIsLoading(false)
+          return
+        }
+
+        // Kein 2FA – direkt zum Dashboard
         window.location.assign("/dashboard")
       } else {
         setError("Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.")
@@ -90,6 +110,30 @@ export function LoginForm({ callbackError }: LoginFormProps) {
       setError("Ein unerwarteter Fehler ist aufgetreten.")
       setIsLoading(false)
     }
+  }
+
+  function handleMfaSuccess() {
+    window.location.assign("/dashboard")
+  }
+
+  function handleMfaAbbrechen() {
+    // Session beenden und zurück zum Login
+    supabase.auth.signOut()
+    setShowMfaStep(false)
+    setMfaFactorId(null)
+    setError(null)
+    form.reset()
+  }
+
+  // 2FA-Schritt anzeigen
+  if (showMfaStep && mfaFactorId) {
+    return (
+      <MfaVerifizierung
+        factorId={mfaFactorId}
+        onSuccess={handleMfaSuccess}
+        onAbbrechen={handleMfaAbbrechen}
+      />
+    )
   }
 
   return (
