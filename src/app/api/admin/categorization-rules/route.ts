@@ -18,7 +18,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("categorization_rules")
       .select(
-        "id, name, rule_type, condition, category_id, is_active, is_invalid, sort_order, created_at, category:categories(id, name, color, created_at)"
+        "id, name, condition, category_id, is_active, is_invalid, sort_order, created_at, category:categories(id, name, color, created_at)"
       )
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true })
@@ -93,12 +93,18 @@ export async function POST(request: Request) {
     // parallele POSTs nicht denselben sort_order bekommen. Die RPC liefert
     // nur die neue ID zurück — die vollständige Zeile (inkl. Category-Join)
     // laden wir anschließend separat nach.
+    // PROJ-15: condition ist jetzt {combinator, criteria[]} — wir serialisieren
+    // aus den einzelnen Input-Feldern und geben es als JSONB an die RPC.
+    const conditionPayload = {
+      combinator: validation.data.combinator,
+      criteria: validation.data.criteria,
+    }
+
     const { data: newId, error: rpcErr } = await supabase.rpc(
       "insert_categorization_rule",
       {
         p_name: validation.data.name,
-        p_rule_type: validation.data.rule_type,
-        p_condition: validation.data.condition as object,
+        p_condition: conditionPayload,
         p_category_id: validation.data.category_id,
         p_is_active: validation.data.is_active ?? true,
       }
@@ -118,7 +124,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from("categorization_rules")
       .select(
-        "id, name, rule_type, condition, category_id, is_active, is_invalid, sort_order, created_at, category:categories(id, name, color, created_at)"
+        "id, name, condition, category_id, is_active, is_invalid, sort_order, created_at, category:categories(id, name, color, created_at)"
       )
       .eq("id", newId as string)
       .single()

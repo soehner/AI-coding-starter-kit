@@ -73,8 +73,8 @@ export interface Category {
   created_at: string
 }
 
-// PROJ-13: Automatische Kategorisierungsregeln
-export type CategorizationRuleType =
+// PROJ-13 / PROJ-15: Kategorisierungsregeln mit zusammengesetzten Kriterien
+export type CriterionType =
   | "text_contains"
   | "counterpart_contains"
   | "amount_range"
@@ -82,35 +82,49 @@ export type CategorizationRuleType =
 
 export type AmountDirection = "both" | "in" | "out"
 
-export interface TextContainsCondition {
+export type RuleCombinator = "AND" | "OR"
+
+export interface TextContainsCriterion {
+  type: "text_contains"
   term: string
 }
 
-export interface CounterpartContainsCondition {
+export interface CounterpartContainsCriterion {
+  type: "counterpart_contains"
   term: string
 }
 
-export interface AmountRangeCondition {
+export interface AmountRangeCriterion {
+  type: "amount_range"
   min: number
   max: number
   direction: AmountDirection
 }
 
-export interface MonthQuarterCondition {
+export interface MonthQuarterCriterion {
+  type: "month_quarter"
   months?: number[]
   quarters?: number[]
 }
 
-export type CategorizationRuleCondition =
-  | TextContainsCondition
-  | CounterpartContainsCondition
-  | AmountRangeCondition
-  | MonthQuarterCondition
+export type RuleCriterion =
+  | TextContainsCriterion
+  | CounterpartContainsCriterion
+  | AmountRangeCriterion
+  | MonthQuarterCriterion
+
+/**
+ * PROJ-15: Die `condition`-JSONB-Spalte trägt jetzt eine
+ * zusammengesetzte Bedingung aus mehreren Kriterien + Verknüpfung.
+ */
+export interface CategorizationRuleCondition {
+  combinator: RuleCombinator
+  criteria: RuleCriterion[]
+}
 
 export interface CategorizationRule {
   id: string
   name: string
-  rule_type: CategorizationRuleType
   condition: CategorizationRuleCondition
   category_id: string
   category?: Category | null

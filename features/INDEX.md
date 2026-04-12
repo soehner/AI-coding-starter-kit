@@ -28,7 +28,8 @@
 | PROJ-12 | Buchungskategorisierung | Deployed | [PROJ-12-buchungskategorisierung.md](PROJ-12-buchungskategorisierung.md) | 2026-04-12 |
 | PROJ-13 | Automatische Kategorisierungsregeln | Deployed | [PROJ-13-kategorisierungsregeln.md](PROJ-13-kategorisierungsregeln.md) | 2026-04-12 |
 | PROJ-14 | Kategoriebasierter Zugriff für Betrachter | Planned | [PROJ-14-kategoriebasierter-zugriff.md](PROJ-14-kategoriebasierter-zugriff.md) | 2026-04-12 |
+| PROJ-15 | Zusammengesetzte Kategorisierungsregeln (UND/ODER) | In Progress | [PROJ-15-zusammengesetzte-regeln.md](PROJ-15-zusammengesetzte-regeln.md) | 2026-04-12 |
 
 <!-- Add features above this line -->
 
-## Next Available ID: PROJ-15
+## Next Available ID: PROJ-16

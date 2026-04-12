@@ -1,12 +1,18 @@
 import { z } from "zod"
 
 /**
- * PROJ-13: Zod-Schemas für Kategorisierungsregeln.
+ * PROJ-15: Zod-Schemas für zusammengesetzte Kategorisierungsregeln.
  *
- * Die `condition` einer Regel ist typ-abhängig (JSONB):
- *  - text_contains / counterpart_contains: { term: string }
- *  - amount_range:                        { min, max, direction }
- *  - month_quarter:                       { months?: number[], quarters?: number[] }
+ * Eine Regel besteht aus:
+ *  - name
+ *  - combinator: "AND" | "OR"
+ *  - criteria: Liste (min 1, max 10) von typisierten Kriterien
+ *  - category_id
+ *  - is_active
+ *
+ * Jedes Kriterium trägt seinen eigenen `type` plus typ-spezifische
+ * Parameter. Die Validierung nutzt eine `z.discriminatedUnion` über
+ * das `type`-Feld.
  */
 
 export const ruleNameSchema = z
@@ -15,18 +21,25 @@ export const ruleNameSchema = z
   .min(1, "Der Regelname darf nicht leer sein.")
   .max(120, "Der Regelname darf maximal 120 Zeichen lang sein.")
 
-export const textContainsConditionSchema = z.object({
-  term: z
-    .string()
-    .trim()
-    .min(1, "Suchbegriff darf nicht leer sein.")
-    .max(200, "Suchbegriff darf maximal 200 Zeichen lang sein."),
+const criterionTermSchema = z
+  .string()
+  .trim()
+  .min(1, "Suchbegriff darf nicht leer sein.")
+  .max(200, "Suchbegriff darf maximal 200 Zeichen lang sein.")
+
+export const textContainsCriterionSchema = z.object({
+  type: z.literal("text_contains"),
+  term: criterionTermSchema,
 })
 
-export const counterpartContainsConditionSchema = textContainsConditionSchema
+export const counterpartContainsCriterionSchema = z.object({
+  type: z.literal("counterpart_contains"),
+  term: criterionTermSchema,
+})
 
-export const amountRangeConditionSchema = z
+export const amountRangeCriterionSchema = z
   .object({
+    type: z.literal("amount_range"),
     min: z
       .number({ message: "Von-Betrag muss eine Zahl sein." })
       .finite("Von-Betrag muss eine Zahl sein."),
@@ -42,8 +55,9 @@ export const amountRangeConditionSchema = z
     path: ["max"],
   })
 
-export const monthQuarterConditionSchema = z
+export const monthQuarterCriterionSchema = z
   .object({
+    type: z.literal("month_quarter"),
     months: z
       .array(z.number().int().min(1).max(12))
       .max(12, "Maximal 12 Monate möglich.")
@@ -54,16 +68,15 @@ export const monthQuarterConditionSchema = z
       .optional(),
   })
   .refine(
-    (d) => (d.months && d.months.length > 0) || (d.quarters && d.quarters.length > 0),
+    (d) =>
+      (d.months && d.months.length > 0) ||
+      (d.quarters && d.quarters.length > 0),
     {
       message: "Mindestens ein Monat oder Quartal muss gewählt werden.",
       path: ["months"],
     }
   )
-  // BUG-005: Monate und Quartale dürfen nicht gleichzeitig gesetzt sein.
-  // Das UI verhindert das bereits, aber der Server muss manipulierte
-  // Requests abweisen, damit die Regel-Matching-Logik nicht stillschweigend
-  // einen der beiden Werte ignoriert.
+  // PROJ-13 BUG-005: Monate und Quartale dürfen nicht gleichzeitig gesetzt sein.
   .refine(
     (d) =>
       !(
@@ -79,65 +92,33 @@ export const monthQuarterConditionSchema = z
     }
   )
 
-export const createCategorizationRuleSchema = z
-  .object({
-    name: ruleNameSchema,
-    rule_type: z.enum(
-      ["text_contains", "counterpart_contains", "amount_range", "month_quarter"],
-      { message: "Ungültiger Regeltyp." }
-    ),
-    category_id: z.string().uuid("Ungültige Kategorie-ID."),
-    is_active: z.boolean().optional(),
-    condition: z.unknown(),
-  })
-  .superRefine((data, ctx) => {
-    switch (data.rule_type) {
-      case "text_contains": {
-        const res = textContainsConditionSchema.safeParse(data.condition)
-        if (!res.success) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["condition"],
-            message: res.error.issues[0]?.message ?? "Ungültige Bedingung.",
-          })
-        }
-        break
-      }
-      case "counterpart_contains": {
-        const res = counterpartContainsConditionSchema.safeParse(data.condition)
-        if (!res.success) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["condition"],
-            message: res.error.issues[0]?.message ?? "Ungültige Bedingung.",
-          })
-        }
-        break
-      }
-      case "amount_range": {
-        const res = amountRangeConditionSchema.safeParse(data.condition)
-        if (!res.success) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["condition"],
-            message: res.error.issues[0]?.message ?? "Ungültige Bedingung.",
-          })
-        }
-        break
-      }
-      case "month_quarter": {
-        const res = monthQuarterConditionSchema.safeParse(data.condition)
-        if (!res.success) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["condition"],
-            message: res.error.issues[0]?.message ?? "Ungültige Bedingung.",
-          })
-        }
-        break
-      }
-    }
-  })
+/**
+ * Discriminated Union über alle Kriteriums-Typen. Jedes Kriterium
+ * wird anhand seines `type`-Feldes an das passende Schema gegeben.
+ */
+export const ruleCriterionSchema = z.discriminatedUnion("type", [
+  textContainsCriterionSchema,
+  counterpartContainsCriterionSchema,
+  amountRangeCriterionSchema,
+  monthQuarterCriterionSchema,
+])
+
+export const ruleCombinatorSchema = z.enum(["AND", "OR"], {
+  message: "Combinator muss 'AND' oder 'OR' sein.",
+})
+
+export const ruleCriteriaListSchema = z
+  .array(ruleCriterionSchema)
+  .min(1, "Mindestens ein Kriterium ist erforderlich.")
+  .max(10, "Maximal 10 Kriterien pro Regel.")
+
+export const createCategorizationRuleSchema = z.object({
+  name: ruleNameSchema,
+  combinator: ruleCombinatorSchema,
+  criteria: ruleCriteriaListSchema,
+  category_id: z.string().uuid("Ungültige Kategorie-ID."),
+  is_active: z.boolean().optional(),
+})
 
 export type CreateCategorizationRuleInput = z.infer<
   typeof createCategorizationRuleSchema
@@ -145,9 +126,10 @@ export type CreateCategorizationRuleInput = z.infer<
 
 export const updateCategorizationRuleSchema = z.object({
   name: ruleNameSchema.optional(),
+  combinator: ruleCombinatorSchema.optional(),
+  criteria: ruleCriteriaListSchema.optional(),
   category_id: z.string().uuid("Ungültige Kategorie-ID.").optional(),
   is_active: z.boolean().optional(),
-  condition: z.unknown().optional(),
   sort_order: z.number().int().min(0).optional(),
 })
 
@@ -156,9 +138,10 @@ export type UpdateCategorizationRuleInput = z.infer<
 >
 
 /**
- * Scope-basierter Plan-Request: liefert die Liste der zu verarbeitenden
- * Buchungs-IDs, damit der Client die eigentliche Anwendung in kleinen
- * Chunks mit echter Progress-Anzeige ausführen kann (BUG-004).
+ * Scope-basierter Plan-Request: liefert die Liste der zu
+ * verarbeitenden Buchungs-IDs, damit der Client die eigentliche
+ * Anwendung in kleinen Chunks mit echter Progress-Anzeige
+ * ausführen kann (PROJ-13 BUG-004).
  */
 export const planCategorizationRulesSchema = z.object({
   scope: z.enum(["uncategorized", "all"], {
@@ -188,11 +171,7 @@ export const applyCategorizationRulesSchema = z
       .optional(),
   })
   .refine(
-    (d) =>
-      (d.scope !== undefined) !== (d.transaction_ids !== undefined) ||
-      // Beide gesetzt ist erlaubt, aber sinnlos — wir verlangen mindestens eines.
-      d.scope !== undefined ||
-      d.transaction_ids !== undefined,
+    (d) => d.scope !== undefined || d.transaction_ids !== undefined,
     {
       message: "Entweder 'scope' oder 'transaction_ids' angeben.",
     }

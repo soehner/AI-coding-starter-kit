@@ -61,19 +61,9 @@ import { RegelFormDialog } from "@/components/regel-form-dialog"
 import { RegelnAnwendenDialog } from "@/components/regeln-anwenden-dialog"
 import { CategoryBadge } from "@/components/category-badge"
 import type {
-  AmountRangeCondition,
   CategorizationRule,
-  CategorizationRuleType,
-  MonthQuarterCondition,
-  TextContainsCondition,
+  RuleCriterion,
 } from "@/lib/types"
-
-const RULE_TYPE_LABELS: Record<CategorizationRuleType, string> = {
-  text_contains: "Buchungstext",
-  counterpart_contains: "Auftraggeber/Empfänger",
-  amount_range: "Betrag",
-  month_quarter: "Monat/Quartal",
-}
 
 const MONTH_SHORT = [
   "Jan",
@@ -90,22 +80,24 @@ const MONTH_SHORT = [
   "Dez",
 ]
 
-function formatCondition(rule: CategorizationRule): string {
-  switch (rule.rule_type) {
-    case "text_contains": {
-      const cond = rule.condition as TextContainsCondition
-      return `enthält „${cond.term}"`
-    }
-    case "counterpart_contains": {
-      const cond = rule.condition as TextContainsCondition
-      return `enthält „${cond.term}"`
-    }
+const CRITERION_TYPE_SHORT: Record<RuleCriterion["type"], string> = {
+  text_contains: "Buchungstext",
+  counterpart_contains: "Auftraggeber",
+  amount_range: "Betrag",
+  month_quarter: "Monat/Quartal",
+}
+
+function formatCriterion(criterion: RuleCriterion): string {
+  switch (criterion.type) {
+    case "text_contains":
+      return `Buchungstext enthält „${criterion.term}"`
+    case "counterpart_contains":
+      return `Auftraggeber enthält „${criterion.term}"`
     case "amount_range": {
-      const cond = rule.condition as AmountRangeCondition
       const dir =
-        cond.direction === "in"
+        criterion.direction === "in"
           ? "Eingang"
-          : cond.direction === "out"
+          : criterion.direction === "out"
             ? "Ausgang"
             : "Ein-/Ausgang"
       const fmt = (n: number) =>
@@ -113,19 +105,30 @@ function formatCondition(rule: CategorizationRule): string {
           style: "currency",
           currency: "EUR",
         }).format(n)
-      return `${fmt(cond.min)} – ${fmt(cond.max)} (${dir})`
+      return `Betrag ${fmt(criterion.min)} – ${fmt(criterion.max)} (${dir})`
     }
-    case "month_quarter": {
-      const cond = rule.condition as MonthQuarterCondition
-      if (cond.months && cond.months.length > 0) {
-        return cond.months.map((m) => MONTH_SHORT[m - 1]).join(", ")
+    case "month_quarter":
+      if (criterion.months && criterion.months.length > 0) {
+        return `Monat: ${criterion.months.map((m) => MONTH_SHORT[m - 1]).join(", ")}`
       }
-      if (cond.quarters && cond.quarters.length > 0) {
-        return cond.quarters.map((q) => `Q${q}`).join(", ")
+      if (criterion.quarters && criterion.quarters.length > 0) {
+        return `Quartal: ${criterion.quarters.map((q) => `Q${q}`).join(", ")}`
       }
-      return ""
-    }
+      return "Monat/Quartal (leer)"
   }
+}
+
+/**
+ * PROJ-15: Formatiert die zusammengesetzte Bedingung einer Regel als
+ * lesbarer Einzeiler. Bei mehreren Kriterien wird der Verknüpfungs-
+ * operator zwischen die Beschreibungen gesetzt.
+ */
+function formatRuleCondition(rule: CategorizationRule): string {
+  const criteria = rule.condition?.criteria ?? []
+  if (criteria.length === 0) return "(keine Kriterien)"
+  if (criteria.length === 1) return formatCriterion(criteria[0])
+  const separator = rule.condition?.combinator === "OR" ? " ODER " : " UND "
+  return criteria.map(formatCriterion).join(separator)
 }
 
 export function KategorisierungsregelnListe() {
@@ -407,9 +410,17 @@ function SortableRuleRow({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{rule.name}</span>
-          <Badge variant="secondary" className="text-xs">
-            {RULE_TYPE_LABELS[rule.rule_type]}
-          </Badge>
+          {(rule.condition?.criteria?.length ?? 0) > 1 ? (
+            <Badge variant="secondary" className="text-xs">
+              {rule.condition?.combinator === "OR" ? "ODER" : "UND"}
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-xs">
+              {CRITERION_TYPE_SHORT[
+                rule.condition?.criteria?.[0]?.type ?? "text_contains"
+              ]}
+            </Badge>
+          )}
           {rule.is_invalid && (
             <Badge
               variant="outline"
@@ -421,7 +432,7 @@ function SortableRuleRow({
           )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="truncate">{formatCondition(rule)}</span>
+          <span className="truncate">{formatRuleCondition(rule)}</span>
           <span aria-hidden="true">→</span>
           {categoryName ? (
             <CategoryBadge

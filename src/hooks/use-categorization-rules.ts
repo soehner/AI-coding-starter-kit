@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 import type {
   CategorizationRule,
-  CategorizationRuleCondition,
-  CategorizationRuleType,
+  RuleCombinator,
+  RuleCriterion,
 } from "@/lib/types"
 
 /**
@@ -141,8 +141,8 @@ export function useCategorizationRulesStatus(): {
 
 interface CreateRulePayload {
   name: string
-  rule_type: CategorizationRuleType
-  condition: CategorizationRuleCondition
+  combinator: RuleCombinator
+  criteria: RuleCriterion[]
   category_id: string
   is_active?: boolean
 }
@@ -169,7 +169,8 @@ export async function createCategorizationRule(
 
 interface UpdateRulePayload {
   name?: string
-  condition?: CategorizationRuleCondition
+  combinator?: RuleCombinator
+  criteria?: RuleCriterion[]
   category_id?: string
   is_active?: boolean
   sort_order?: number

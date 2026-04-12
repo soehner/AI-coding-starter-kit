@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, Loader2, Plus, X } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useCategories } from "@/hooks/use-categories"
 import {
   createCategorizationRule,
@@ -29,13 +30,14 @@ import {
 } from "@/hooks/use-categorization-rules"
 import type {
   AmountDirection,
-  AmountRangeCondition,
+  AmountRangeCriterion,
   CategorizationRule,
-  CategorizationRuleCondition,
-  CategorizationRuleType,
-  CounterpartContainsCondition,
-  MonthQuarterCondition,
-  TextContainsCondition,
+  CounterpartContainsCriterion,
+  CriterionType,
+  MonthQuarterCriterion,
+  RuleCombinator,
+  RuleCriterion,
+  TextContainsCriterion,
 } from "@/lib/types"
 
 interface RegelFormDialogProps {
@@ -46,7 +48,7 @@ interface RegelFormDialogProps {
   onSaved?: () => void
 }
 
-const RULE_TYPE_LABELS: Record<CategorizationRuleType, string> = {
+const CRITERION_TYPE_LABELS: Record<CriterionType, string> = {
   text_contains: "Buchungstext enthält",
   counterpart_contains: "Auftraggeber/Empfänger enthält",
   amount_range: "Betrag im Bereich",
@@ -68,7 +70,147 @@ const MONTH_NAMES = [
   "Dezember",
 ]
 
-type MonthQuarterMode = "months" | "quarters"
+const MAX_CRITERIA = 10
+
+/**
+ * PROJ-15: Editierbare Form eines einzelnen Kriteriums im UI. Hält
+ * ALLE Eingabefelder, auch wenn nur eines davon je nach Typ sichtbar
+ * ist. Beim Typ-Wechsel bleiben andere Felder erhalten, werden beim
+ * Serialisieren aber ignoriert.
+ */
+interface CriterionDraft {
+  /** Rein UI-seitige Kennung für React-keys. Nicht persistiert. */
+  uid: string
+  type: CriterionType
+  term: string
+  amountMin: string
+  amountMax: string
+  amountDirection: AmountDirection
+  mqMode: "months" | "quarters"
+  selectedMonths: number[]
+  selectedQuarters: number[]
+}
+
+function newDraftUid(): string {
+  return Math.random().toString(36).slice(2, 10)
+}
+
+function emptyDraft(): CriterionDraft {
+  return {
+    uid: newDraftUid(),
+    type: "text_contains",
+    term: "",
+    amountMin: "",
+    amountMax: "",
+    amountDirection: "both",
+    mqMode: "months",
+    selectedMonths: [],
+    selectedQuarters: [],
+  }
+}
+
+function draftFromCriterion(c: RuleCriterion): CriterionDraft {
+  const base = emptyDraft()
+  base.type = c.type
+  switch (c.type) {
+    case "text_contains":
+    case "counterpart_contains":
+      base.term = c.term ?? ""
+      break
+    case "amount_range":
+      base.amountMin =
+        c.min !== undefined ? c.min.toString().replace(".", ",") : ""
+      base.amountMax =
+        c.max !== undefined ? c.max.toString().replace(".", ",") : ""
+      base.amountDirection = c.direction ?? "both"
+      break
+    case "month_quarter":
+      if (c.months && c.months.length > 0) {
+        base.mqMode = "months"
+        base.selectedMonths = [...c.months]
+      } else if (c.quarters && c.quarters.length > 0) {
+        base.mqMode = "quarters"
+        base.selectedQuarters = [...c.quarters]
+      }
+      break
+  }
+  return base
+}
+
+/**
+ * Serialisiert einen Draft in ein API-Kriterium. Liefert einen String
+ * mit der Fehlermeldung, wenn die Eingabe ungültig ist, sonst das
+ * typisierte Kriterium.
+ */
+function serializeDraft(
+  draft: CriterionDraft,
+  index: number
+): { criterion: RuleCriterion } | { error: string } {
+  const prefix = `Kriterium ${index + 1}: `
+  switch (draft.type) {
+    case "text_contains":
+    case "counterpart_contains": {
+      const trimmed = draft.term.trim()
+      if (!trimmed) {
+        return { error: prefix + "Bitte einen Suchbegriff eingeben." }
+      }
+      const criterion =
+        draft.type === "text_contains"
+          ? ({ type: "text_contains", term: trimmed } satisfies TextContainsCriterion)
+          : ({
+              type: "counterpart_contains",
+              term: trimmed,
+            } satisfies CounterpartContainsCriterion)
+      return { criterion }
+    }
+    case "amount_range": {
+      const min = parseFloat(draft.amountMin.replace(",", "."))
+      const max = parseFloat(draft.amountMax.replace(",", "."))
+      if (isNaN(min) || isNaN(max)) {
+        return {
+          error: prefix + "Von- und Bis-Betrag müssen gültige Zahlen sein.",
+        }
+      }
+      if (min > max) {
+        return {
+          error:
+            prefix +
+            "Der Von-Betrag darf nicht größer als der Bis-Betrag sein.",
+        }
+      }
+      return {
+        criterion: {
+          type: "amount_range",
+          min,
+          max,
+          direction: draft.amountDirection,
+        } satisfies AmountRangeCriterion,
+      }
+    }
+    case "month_quarter": {
+      if (draft.mqMode === "months") {
+        if (draft.selectedMonths.length === 0) {
+          return { error: prefix + "Bitte mindestens einen Monat auswählen." }
+        }
+        return {
+          criterion: {
+            type: "month_quarter",
+            months: [...draft.selectedMonths].sort((a, b) => a - b),
+          } satisfies MonthQuarterCriterion,
+        }
+      }
+      if (draft.selectedQuarters.length === 0) {
+        return { error: prefix + "Bitte mindestens ein Quartal auswählen." }
+      }
+      return {
+        criterion: {
+          type: "month_quarter",
+          quarters: [...draft.selectedQuarters].sort((a, b) => a - b),
+        } satisfies MonthQuarterCriterion,
+      }
+    }
+  }
+}
 
 export function RegelFormDialog({
   open,
@@ -79,20 +221,10 @@ export function RegelFormDialog({
   const categories = useCategories()
 
   const [name, setName] = useState("")
-  const [ruleType, setRuleType] =
-    useState<CategorizationRuleType>("text_contains")
+  const [combinator, setCombinator] = useState<RuleCombinator>("AND")
+  const [criteria, setCriteria] = useState<CriterionDraft[]>([emptyDraft()])
   const [categoryId, setCategoryId] = useState<string>("")
   const [isActive, setIsActive] = useState(true)
-
-  // Typ-spezifische Felder
-  const [term, setTerm] = useState("")
-  const [amountMin, setAmountMin] = useState("")
-  const [amountMax, setAmountMax] = useState("")
-  const [amountDirection, setAmountDirection] =
-    useState<AmountDirection>("both")
-  const [mqMode, setMqMode] = useState<MonthQuarterMode>("months")
-  const [selectedMonths, setSelectedMonths] = useState<number[]>([])
-  const [selectedQuarters, setSelectedQuarters] = useState<number[]>([])
 
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
@@ -106,123 +238,63 @@ export function RegelFormDialog({
 
     if (rule) {
       setName(rule.name)
-      setRuleType(rule.rule_type)
+      setCombinator(rule.condition?.combinator ?? "AND")
+      const existingCriteria = rule.condition?.criteria ?? []
+      setCriteria(
+        existingCriteria.length > 0
+          ? existingCriteria.map(draftFromCriterion)
+          : [emptyDraft()]
+      )
       setCategoryId(rule.category_id)
       setIsActive(rule.is_active)
-
-      switch (rule.rule_type) {
-        case "text_contains":
-        case "counterpart_contains": {
-          const cond = rule.condition as TextContainsCondition
-          setTerm(cond.term ?? "")
-          break
-        }
-        case "amount_range": {
-          const cond = rule.condition as AmountRangeCondition
-          setAmountMin(
-            cond.min !== undefined
-              ? cond.min.toString().replace(".", ",")
-              : ""
-          )
-          setAmountMax(
-            cond.max !== undefined
-              ? cond.max.toString().replace(".", ",")
-              : ""
-          )
-          setAmountDirection(cond.direction ?? "both")
-          break
-        }
-        case "month_quarter": {
-          const cond = rule.condition as MonthQuarterCondition
-          if (cond.months && cond.months.length > 0) {
-            setMqMode("months")
-            setSelectedMonths(cond.months)
-            setSelectedQuarters([])
-          } else if (cond.quarters && cond.quarters.length > 0) {
-            setMqMode("quarters")
-            setSelectedQuarters(cond.quarters)
-            setSelectedMonths([])
-          }
-          break
-        }
-      }
     } else {
       setName("")
-      setRuleType("text_contains")
+      setCombinator("AND")
+      setCriteria([emptyDraft()])
       setCategoryId(categories[0]?.id ?? "")
       setIsActive(true)
-      setTerm("")
-      setAmountMin("")
-      setAmountMax("")
-      setAmountDirection("both")
-      setMqMode("months")
-      setSelectedMonths([])
-      setSelectedQuarters([])
     }
   }, [open, rule, categories])
 
-  function toggleMonth(month: number) {
-    setSelectedMonths((prev) =>
-      prev.includes(month) ? prev.filter((m) => m !== month) : [...prev, month]
+  function updateDraft(uid: string, patch: Partial<CriterionDraft>) {
+    setCriteria((prev) =>
+      prev.map((d) => (d.uid === uid ? { ...d, ...patch } : d))
     )
   }
 
-  function toggleQuarter(q: number) {
-    setSelectedQuarters((prev) =>
-      prev.includes(q) ? prev.filter((x) => x !== q) : [...prev, q]
+  function toggleMonth(uid: string, month: number) {
+    setCriteria((prev) =>
+      prev.map((d) => {
+        if (d.uid !== uid) return d
+        const selected = d.selectedMonths.includes(month)
+          ? d.selectedMonths.filter((m) => m !== month)
+          : [...d.selectedMonths, month]
+        return { ...d, selectedMonths: selected }
+      })
     )
   }
 
-  function buildCondition(): CategorizationRuleCondition | null {
-    switch (ruleType) {
-      case "text_contains":
-      case "counterpart_contains": {
-        const trimmed = term.trim()
-        if (!trimmed) {
-          setError("Bitte einen Suchbegriff eingeben.")
-          return null
-        }
-        return { term: trimmed } satisfies
-          | TextContainsCondition
-          | CounterpartContainsCondition
-      }
-      case "amount_range": {
-        const min = parseFloat(amountMin.replace(",", "."))
-        const max = parseFloat(amountMax.replace(",", "."))
-        if (isNaN(min) || isNaN(max)) {
-          setError("Von- und Bis-Betrag müssen gültige Zahlen sein.")
-          return null
-        }
-        if (min > max) {
-          setError("Der Von-Betrag darf nicht größer als der Bis-Betrag sein.")
-          return null
-        }
-        return {
-          min,
-          max,
-          direction: amountDirection,
-        } satisfies AmountRangeCondition
-      }
-      case "month_quarter": {
-        if (mqMode === "months") {
-          if (selectedMonths.length === 0) {
-            setError("Bitte mindestens einen Monat auswählen.")
-            return null
-          }
-          return {
-            months: [...selectedMonths].sort((a, b) => a - b),
-          } satisfies MonthQuarterCondition
-        } else {
-          if (selectedQuarters.length === 0) {
-            setError("Bitte mindestens ein Quartal auswählen.")
-            return null
-          }
-          return {
-            quarters: [...selectedQuarters].sort((a, b) => a - b),
-          } satisfies MonthQuarterCondition
-        }
-      }
-    }
+  function toggleQuarter(uid: string, q: number) {
+    setCriteria((prev) =>
+      prev.map((d) => {
+        if (d.uid !== uid) return d
+        const selected = d.selectedQuarters.includes(q)
+          ? d.selectedQuarters.filter((x) => x !== q)
+          : [...d.selectedQuarters, q]
+        return { ...d, selectedQuarters: selected }
+      })
+    )
+  }
+
+  function addCriterion() {
+    if (criteria.length >= MAX_CRITERIA) return
+    setCriteria((prev) => [...prev, emptyDraft()])
+  }
+
+  function removeCriterion(uid: string) {
+    setCriteria((prev) =>
+      prev.length <= 1 ? prev : prev.filter((d) => d.uid !== uid)
+    )
   }
 
   async function handleSave() {
@@ -236,9 +308,20 @@ export function RegelFormDialog({
       setError("Bitte eine Ziel-Kategorie wählen.")
       return
     }
+    if (criteria.length === 0) {
+      setError("Mindestens ein Kriterium ist erforderlich.")
+      return
+    }
 
-    const condition = buildCondition()
-    if (!condition) return
+    const serialized: RuleCriterion[] = []
+    for (let i = 0; i < criteria.length; i++) {
+      const result = serializeDraft(criteria[i], i)
+      if ("error" in result) {
+        setError(result.error)
+        return
+      }
+      serialized.push(result.criterion)
+    }
 
     setIsSaving(true)
     try {
@@ -247,15 +330,16 @@ export function RegelFormDialog({
           name: name.trim(),
           category_id: categoryId,
           is_active: isActive,
-          condition,
+          combinator,
+          criteria: serialized,
         })
       } else {
         await createCategorizationRule({
           name: name.trim(),
-          rule_type: ruleType,
           category_id: categoryId,
           is_active: isActive,
-          condition,
+          combinator,
+          criteria: serialized,
         })
       }
       onSaved?.()
@@ -269,14 +353,15 @@ export function RegelFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {isEdit ? "Regel bearbeiten" : "Neue Regel anlegen"}
           </DialogTitle>
           <DialogDescription>
-            Definiere eine Bedingung, die beim Import automatisch eine Kategorie
-            zuweist. Mehrere passende Regeln greifen gleichzeitig.
+            Definiere eine oder mehrere Bedingungen. Mehrere Kriterien lassen
+            sich per UND (alle müssen zutreffen) oder ODER (eines reicht)
+            verknüpfen.
           </DialogDescription>
         </DialogHeader>
 
@@ -300,183 +385,69 @@ export function RegelFormDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="rule-type">Regeltyp</Label>
-            <Select
-              value={ruleType}
-              onValueChange={(v) => setRuleType(v as CategorizationRuleType)}
-              disabled={isSaving || isEdit}
+          {/* Kriterien */}
+          <div className="space-y-3 rounded-md border p-3">
+            <div className="flex flex-col gap-3">
+              <Label className="text-sm font-medium">Kriterien</Label>
+              {criteria.length > 1 && (
+                <RadioGroup
+                  value={combinator}
+                  onValueChange={(v) => setCombinator(v as RuleCombinator)}
+                  disabled={isSaving}
+                  className="flex flex-col gap-1.5 sm:flex-row sm:gap-4"
+                >
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <RadioGroupItem
+                      value="AND"
+                      id="combinator-and"
+                      aria-label="Alle Kriterien müssen zutreffen"
+                    />
+                    <span>Alle Kriterien müssen zutreffen (UND)</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <RadioGroupItem
+                      value="OR"
+                      id="combinator-or"
+                      aria-label="Mindestens ein Kriterium trifft zu"
+                    />
+                    <span>Mindestens ein Kriterium trifft zu (ODER)</span>
+                  </label>
+                </RadioGroup>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              {criteria.map((draft, idx) => (
+                <CriterionRow
+                  key={draft.uid}
+                  draft={draft}
+                  index={idx}
+                  canDelete={criteria.length > 1}
+                  isSaving={isSaving}
+                  onChange={(patch) => updateDraft(draft.uid, patch)}
+                  onToggleMonth={(m) => toggleMonth(draft.uid, m)}
+                  onToggleQuarter={(q) => toggleQuarter(draft.uid, q)}
+                  onRemove={() => removeCriterion(draft.uid)}
+                />
+              ))}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addCriterion}
+              disabled={isSaving || criteria.length >= MAX_CRITERIA}
             >
-              <SelectTrigger id="rule-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(
-                  Object.keys(RULE_TYPE_LABELS) as CategorizationRuleType[]
-                ).map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {RULE_TYPE_LABELS[t]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {isEdit && (
+              <Plus className="mr-1.5 h-4 w-4" />
+              Kriterium hinzufügen
+            </Button>
+            {criteria.length >= MAX_CRITERIA && (
               <p className="text-xs text-muted-foreground">
-                Der Regeltyp kann nach dem Anlegen nicht mehr geändert werden.
+                Maximal {MAX_CRITERIA} Kriterien pro Regel.
               </p>
             )}
           </div>
-
-          {/* Typ-spezifische Felder */}
-          {(ruleType === "text_contains" ||
-            ruleType === "counterpart_contains") && (
-            <div className="space-y-1.5">
-              <Label htmlFor="rule-term">
-                {ruleType === "text_contains"
-                  ? "Suchbegriff im Buchungstext"
-                  : "Suchbegriff im Auftraggeber/Empfänger"}
-              </Label>
-              <Input
-                id="rule-term"
-                value={term}
-                onChange={(e) => setTerm(e.target.value)}
-                placeholder="z. B. SEPA oder Max Mustermann"
-                maxLength={200}
-                disabled={isSaving}
-              />
-              <p className="text-xs text-muted-foreground">
-                Groß-/Kleinschreibung wird ignoriert.
-              </p>
-            </div>
-          )}
-
-          {ruleType === "amount_range" && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="amount-min">Von (€)</Label>
-                  <Input
-                    id="amount-min"
-                    inputMode="decimal"
-                    value={amountMin}
-                    onChange={(e) => setAmountMin(e.target.value)}
-                    placeholder="10,00"
-                    disabled={isSaving}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="amount-max">Bis (€)</Label>
-                  <Input
-                    id="amount-max"
-                    inputMode="decimal"
-                    value={amountMax}
-                    onChange={(e) => setAmountMax(e.target.value)}
-                    placeholder="20,00"
-                    disabled={isSaving}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="amount-direction">Richtung</Label>
-                <Select
-                  value={amountDirection}
-                  onValueChange={(v) =>
-                    setAmountDirection(v as AmountDirection)
-                  }
-                  disabled={isSaving}
-                >
-                  <SelectTrigger id="amount-direction">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="both">Eingang und Ausgang</SelectItem>
-                    <SelectItem value="in">Nur Eingang (positiv)</SelectItem>
-                    <SelectItem value="out">Nur Ausgang (negativ)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Beträge werden als absolute Werte verglichen. „Eingang“ meint
-                positive, „Ausgang“ negative Buchungen.
-              </p>
-            </div>
-          )}
-
-          {ruleType === "month_quarter" && (
-            <div className="space-y-3">
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={mqMode === "months" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setMqMode("months")}
-                  disabled={isSaving}
-                >
-                  Monate
-                </Button>
-                <Button
-                  type="button"
-                  variant={mqMode === "quarters" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setMqMode("quarters")}
-                  disabled={isSaving}
-                >
-                  Quartale
-                </Button>
-              </div>
-
-              {mqMode === "months" ? (
-                <div
-                  className="grid grid-cols-3 gap-2"
-                  role="group"
-                  aria-label="Monate auswählen"
-                >
-                  {MONTH_NAMES.map((label, idx) => {
-                    const month = idx + 1
-                    const checked = selectedMonths.includes(month)
-                    return (
-                      <label
-                        key={month}
-                        className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm hover:bg-accent"
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => toggleMonth(month)}
-                          disabled={isSaving}
-                          aria-label={label}
-                        />
-                        <span>{label}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div
-                  className="grid grid-cols-2 gap-2"
-                  role="group"
-                  aria-label="Quartale auswählen"
-                >
-                  {[1, 2, 3, 4].map((q) => {
-                    const checked = selectedQuarters.includes(q)
-                    return (
-                      <label
-                        key={q}
-                        className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm hover:bg-accent"
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() => toggleQuarter(q)}
-                          disabled={isSaving}
-                          aria-label={`Quartal ${q}`}
-                        />
-                        <span>Q{q}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="rule-category">Ziel-Kategorie</Label>
@@ -505,7 +476,7 @@ export function RegelFormDialog({
             </Select>
             {categories.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                Noch keine Kategorien angelegt. Lege zuerst im Tab „Kategorien“
+                Noch keine Kategorien angelegt. Lege zuerst im Tab „Kategorien&ldquo;
                 eine Kategorie an.
               </p>
             )}
@@ -538,5 +509,226 @@ export function RegelFormDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// CriterionRow — Eingabefelder für ein einzelnes Kriterium
+// ---------------------------------------------------------------------------
+
+interface CriterionRowProps {
+  draft: CriterionDraft
+  index: number
+  canDelete: boolean
+  isSaving: boolean
+  onChange: (patch: Partial<CriterionDraft>) => void
+  onToggleMonth: (month: number) => void
+  onToggleQuarter: (q: number) => void
+  onRemove: () => void
+}
+
+function CriterionRow({
+  draft,
+  index,
+  canDelete,
+  isSaving,
+  onChange,
+  onToggleMonth,
+  onToggleQuarter,
+  onRemove,
+}: CriterionRowProps) {
+  return (
+    <div className="space-y-3 rounded-md border border-dashed p-3">
+      <div className="flex items-start gap-2">
+        <div className="flex-1 space-y-1.5">
+          <Label htmlFor={`criterion-type-${draft.uid}`} className="text-xs">
+            Kriterium {index + 1}
+          </Label>
+          <Select
+            value={draft.type}
+            onValueChange={(v) => onChange({ type: v as CriterionType })}
+            disabled={isSaving}
+          >
+            <SelectTrigger id={`criterion-type-${draft.uid}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(CRITERION_TYPE_LABELS) as CriterionType[]).map(
+                (t) => (
+                  <SelectItem key={t} value={t}>
+                    {CRITERION_TYPE_LABELS[t]}
+                  </SelectItem>
+                )
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="mt-6 h-8 w-8 shrink-0 text-destructive hover:text-destructive"
+          onClick={onRemove}
+          disabled={isSaving || !canDelete}
+          aria-label={`Kriterium ${index + 1} entfernen`}
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {(draft.type === "text_contains" ||
+        draft.type === "counterpart_contains") && (
+        <div className="space-y-1.5">
+          <Label htmlFor={`criterion-term-${draft.uid}`}>
+            {draft.type === "text_contains"
+              ? "Suchbegriff im Buchungstext"
+              : "Suchbegriff im Auftraggeber/Empfänger"}
+          </Label>
+          <Input
+            id={`criterion-term-${draft.uid}`}
+            value={draft.term}
+            onChange={(e) => onChange({ term: e.target.value })}
+            placeholder="z. B. SEPA oder Max Mustermann"
+            maxLength={200}
+            disabled={isSaving}
+          />
+          <p className="text-xs text-muted-foreground">
+            Groß-/Kleinschreibung wird ignoriert.
+          </p>
+        </div>
+      )}
+
+      {draft.type === "amount_range" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor={`criterion-min-${draft.uid}`}>Von (€)</Label>
+              <Input
+                id={`criterion-min-${draft.uid}`}
+                inputMode="decimal"
+                value={draft.amountMin}
+                onChange={(e) => onChange({ amountMin: e.target.value })}
+                placeholder="10,00"
+                disabled={isSaving}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`criterion-max-${draft.uid}`}>Bis (€)</Label>
+              <Input
+                id={`criterion-max-${draft.uid}`}
+                inputMode="decimal"
+                value={draft.amountMax}
+                onChange={(e) => onChange({ amountMax: e.target.value })}
+                placeholder="20,00"
+                disabled={isSaving}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`criterion-direction-${draft.uid}`}>Richtung</Label>
+            <Select
+              value={draft.amountDirection}
+              onValueChange={(v) =>
+                onChange({ amountDirection: v as AmountDirection })
+              }
+              disabled={isSaving}
+            >
+              <SelectTrigger id={`criterion-direction-${draft.uid}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="both">Eingang und Ausgang</SelectItem>
+                <SelectItem value="in">Nur Eingang (positiv)</SelectItem>
+                <SelectItem value="out">Nur Ausgang (negativ)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Beträge werden als absolute Werte verglichen. „Eingang&ldquo; meint
+            positive, „Ausgang&ldquo; negative Buchungen.
+          </p>
+        </div>
+      )}
+
+      {draft.type === "month_quarter" && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={draft.mqMode === "months" ? "default" : "outline"}
+              size="sm"
+              onClick={() =>
+                onChange({ mqMode: "months", selectedQuarters: [] })
+              }
+              disabled={isSaving}
+            >
+              Monate
+            </Button>
+            <Button
+              type="button"
+              variant={draft.mqMode === "quarters" ? "default" : "outline"}
+              size="sm"
+              onClick={() =>
+                onChange({ mqMode: "quarters", selectedMonths: [] })
+              }
+              disabled={isSaving}
+            >
+              Quartale
+            </Button>
+          </div>
+
+          {draft.mqMode === "months" ? (
+            <div
+              className="grid grid-cols-3 gap-2"
+              role="group"
+              aria-label="Monate auswählen"
+            >
+              {MONTH_NAMES.map((label, idx) => {
+                const month = idx + 1
+                const checked = draft.selectedMonths.includes(month)
+                return (
+                  <label
+                    key={month}
+                    className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm hover:bg-accent"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => onToggleMonth(month)}
+                      disabled={isSaving}
+                      aria-label={label}
+                    />
+                    <span>{label}</span>
+                  </label>
+                )
+              })}
+            </div>
+          ) : (
+            <div
+              className="grid grid-cols-2 gap-2"
+              role="group"
+              aria-label="Quartale auswählen"
+            >
+              {[1, 2, 3, 4].map((q) => {
+                const checked = draft.selectedQuarters.includes(q)
+                return (
+                  <label
+                    key={q}
+                    className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm hover:bg-accent"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => onToggleQuarter(q)}
+                      disabled={isSaving}
+                      aria-label={`Quartal ${q}`}
+                    />
+                    <span>Q{q}</span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }

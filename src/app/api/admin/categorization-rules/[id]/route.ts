@@ -2,14 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { requireAdmin } from "@/lib/admin-auth"
 import { createServerSupabaseClient } from "@/lib/supabase-server"
-import {
-  updateCategorizationRuleSchema,
-  textContainsConditionSchema,
-  counterpartContainsConditionSchema,
-  amountRangeConditionSchema,
-  monthQuarterConditionSchema,
-} from "@/lib/validations/categorization-rules"
-import type { CategorizationRuleType } from "@/lib/types"
+import { updateCategorizationRuleSchema } from "@/lib/validations/categorization-rules"
 
 const paramsSchema = z.object({
   id: z.string().uuid("Ungültige Regel-ID."),
@@ -17,9 +10,13 @@ const paramsSchema = z.object({
 
 /**
  * PATCH /api/admin/categorization-rules/[id]
- * Aktualisiert Name, Bedingung, Zielkategorie, Aktiv-Status oder sort_order.
- * Der Regeltyp kann NICHT geändert werden (sonst müsste condition re-validiert
- * werden – das erfolgt beim Anlegen). Nur Admins.
+ *
+ * PROJ-15: Aktualisiert Name, Kriterien-Liste, Verknüpfungsoperator,
+ * Zielkategorie, Aktiv-Status oder sort_order. Die Validierung der
+ * einzelnen Kriterien erfolgt in einem Rutsch durch das
+ * `updateCategorizationRuleSchema` (inkl. `z.discriminatedUnion`).
+ *
+ * Nur Admins.
  */
 export async function PATCH(
   request: Request,
@@ -56,10 +53,10 @@ export async function PATCH(
 
     const supabase = await createServerSupabaseClient()
 
-    // Bestehende Regel laden (für Typ-Kontext bei Bedingungs-Validierung)
+    // Bestehende Regel prüfen (nur Existenz, keine Typ-Auflösung mehr nötig)
     const { data: existing, error: loadErr } = await supabase
       .from("categorization_rules")
-      .select("id, rule_type")
+      .select("id")
       .eq("id", paramCheck.data.id)
       .maybeSingle()
 
@@ -76,38 +73,44 @@ export async function PATCH(
       )
     }
 
-    // Wenn condition mitgegeben wurde, typgerecht validieren
-    if (validation.data.condition !== undefined) {
-      const ruleType = existing.rule_type as CategorizationRuleType
-      const schemaByType = {
-        text_contains: textContainsConditionSchema,
-        counterpart_contains: counterpartContainsConditionSchema,
-        amount_range: amountRangeConditionSchema,
-        month_quarter: monthQuarterConditionSchema,
-      } as const
-      const schema = schemaByType[ruleType]
-      if (!schema) {
-        return NextResponse.json(
-          { error: "Unbekannter Regeltyp." },
-          { status: 400 }
-        )
-      }
-      const condCheck = schema.safeParse(validation.data.condition)
-      if (!condCheck.success) {
+    // Update-Payload aus einzelnen Feldern bauen. `combinator` und `criteria`
+    // werden zur `condition`-Spalte zusammengefasst — und zwar als Atom,
+    // nicht teilweise. Wer Kriterien ändern will, schickt die ganze Liste.
+    const updatePayload: Record<string, unknown> = {}
+    if (validation.data.name !== undefined) {
+      updatePayload.name = validation.data.name
+    }
+    if (validation.data.is_active !== undefined) {
+      updatePayload.is_active = validation.data.is_active
+    }
+    if (validation.data.sort_order !== undefined) {
+      updatePayload.sort_order = validation.data.sort_order
+    }
+    if (
+      validation.data.combinator !== undefined ||
+      validation.data.criteria !== undefined
+    ) {
+      if (
+        validation.data.combinator === undefined ||
+        validation.data.criteria === undefined
+      ) {
         return NextResponse.json(
           {
             error:
-              condCheck.error.issues[0]?.message ?? "Ungültige Bedingung.",
+              "Für eine Änderung der Kriterien müssen `combinator` und `criteria` zusammen gesendet werden.",
           },
           { status: 400 }
         )
+      }
+      updatePayload.condition = {
+        combinator: validation.data.combinator,
+        criteria: validation.data.criteria,
       }
     }
 
     // Wenn category_id mitgegeben wurde, prüfen, dass sie existiert.
     // Gleichzeitig is_invalid zurücksetzen, wenn wieder eine gültige Kategorie
     // gesetzt wird.
-    const updatePayload: Record<string, unknown> = { ...validation.data }
     if (validation.data.category_id) {
       const { data: cat, error: catErr } = await supabase
         .from("categories")
@@ -126,6 +129,7 @@ export async function PATCH(
           { status: 400 }
         )
       }
+      updatePayload.category_id = validation.data.category_id
       updatePayload.is_invalid = false
     }
 
@@ -134,7 +138,7 @@ export async function PATCH(
       .update(updatePayload)
       .eq("id", paramCheck.data.id)
       .select(
-        "id, name, rule_type, condition, category_id, is_active, is_invalid, sort_order, created_at, category:categories(id, name, color, created_at)"
+        "id, name, condition, category_id, is_active, is_invalid, sort_order, created_at, category:categories(id, name, color, created_at)"
       )
       .single()
 

@@ -11,10 +11,12 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type {
-  AmountRangeCondition,
+  AmountRangeCriterion,
   CategorizationRule,
-  MonthQuarterCondition,
-  TextContainsCondition,
+  MonthQuarterCriterion,
+  RuleCriterion,
+  TextContainsCriterion,
+  CounterpartContainsCriterion,
 } from "@/lib/types"
 
 interface TransactionRow {
@@ -44,61 +46,79 @@ export interface ApplyRulesResult {
 }
 
 /**
- * Prüft, ob eine Regel auf eine Buchung zutrifft.
+ * PROJ-15: Prüft, ob ein einzelnes Kriterium auf eine Buchung zutrifft.
  *
- * BUG-002-Fix: `counterpart_contains` matcht strikt gegen das separate
+ * `counterpart_contains` matcht strikt gegen das separate
  * `counterpart`-Feld (vom KI-Parser befüllt). Bei Altdaten ohne
- * `counterpart` (NULL) matcht die Regel nicht — das ist gewollt, damit
- * es keine impliziten Treffer auf den Verwendungszweck gibt.
+ * `counterpart` (NULL) matcht das Kriterium nicht — das ist gewollt,
+ * damit es keine impliziten Treffer auf den Verwendungszweck gibt.
  */
-function ruleMatches(rule: CategorizationRule, tx: MatchableTransaction): boolean {
-  switch (rule.rule_type) {
+function criterionMatches(
+  criterion: RuleCriterion,
+  tx: MatchableTransaction
+): boolean {
+  switch (criterion.type) {
     case "text_contains": {
-      const cond = rule.condition as TextContainsCondition
-      if (!cond?.term) return false
-      return tx.description.toLowerCase().includes(cond.term.toLowerCase())
+      const c = criterion as TextContainsCriterion
+      if (!c.term) return false
+      return tx.description.toLowerCase().includes(c.term.toLowerCase())
     }
     case "counterpart_contains": {
-      const cond = rule.condition as TextContainsCondition
-      if (!cond?.term) return false
+      const c = criterion as CounterpartContainsCriterion
+      if (!c.term) return false
       if (!tx.counterpart) return false
-      return tx.counterpart.toLowerCase().includes(cond.term.toLowerCase())
+      return tx.counterpart.toLowerCase().includes(c.term.toLowerCase())
     }
     case "amount_range": {
-      const cond = rule.condition as AmountRangeCondition
+      const c = criterion as AmountRangeCriterion
       if (
-        typeof cond?.min !== "number" ||
-        typeof cond?.max !== "number" ||
-        !cond?.direction
+        typeof c.min !== "number" ||
+        typeof c.max !== "number" ||
+        !c.direction
       ) {
         return false
       }
-      // Richtungs-Check
-      if (cond.direction === "in" && tx.amount <= 0) return false
-      if (cond.direction === "out" && tx.amount >= 0) return false
-      // Beträge werden als absolute Werte verglichen (siehe RegelFormDialog-Text).
+      if (c.direction === "in" && tx.amount <= 0) return false
+      if (c.direction === "out" && tx.amount >= 0) return false
       const abs = Math.abs(tx.amount)
-      return abs >= cond.min && abs <= cond.max
+      return abs >= c.min && abs <= c.max
     }
     case "month_quarter": {
-      const cond = rule.condition as MonthQuarterCondition
+      const c = criterion as MonthQuarterCriterion
       // booking_date ist ein ISO-Datum (YYYY-MM-DD). Monat direkt parsen,
       // um Zeitzonen-Artefakte zu vermeiden.
       const monthMatch = /^(\d{4})-(\d{2})-\d{2}$/.exec(tx.booking_date)
       if (!monthMatch) return false
       const month = parseInt(monthMatch[2], 10)
-      if (cond?.months && cond.months.length > 0) {
-        return cond.months.includes(month)
+      if (c.months && c.months.length > 0) {
+        return c.months.includes(month)
       }
-      if (cond?.quarters && cond.quarters.length > 0) {
+      if (c.quarters && c.quarters.length > 0) {
         const quarter = Math.ceil(month / 3)
-        return cond.quarters.includes(quarter)
+        return c.quarters.includes(quarter)
       }
       return false
     }
     default:
       return false
   }
+}
+
+/**
+ * PROJ-15: Prüft, ob eine Regel (zusammengesetzt aus mehreren Kriterien +
+ * Verknüpfungsoperator) auf eine Buchung zutrifft. Eine Regel ohne
+ * Kriterien matcht nie — defensive Absicherung gegen Datenfehler.
+ */
+function ruleMatches(
+  rule: CategorizationRule,
+  tx: MatchableTransaction
+): boolean {
+  const { combinator, criteria } = rule.condition ?? { combinator: "AND", criteria: [] }
+  if (!criteria || criteria.length === 0) return false
+  if (combinator === "OR") {
+    return criteria.some((c) => criterionMatches(c, tx))
+  }
+  return criteria.every((c) => criterionMatches(c, tx))
 }
 
 /**
@@ -121,7 +141,7 @@ export async function applyCategorizationRules(
   const { data: rules, error: rulesError } = await supabase
     .from("categorization_rules")
     .select(
-      "id, name, rule_type, condition, category_id, is_active, is_invalid, sort_order, created_at"
+      "id, name, condition, category_id, is_active, is_invalid, sort_order, created_at"
     )
     .eq("is_active", true)
     .eq("is_invalid", false)
@@ -286,7 +306,7 @@ export async function loadActiveCategorizationRules(
   const { data, error } = await supabase
     .from("categorization_rules")
     .select(
-      "id, name, rule_type, condition, category_id, is_active, is_invalid, sort_order, created_at"
+      "id, name, condition, category_id, is_active, is_invalid, sort_order, created_at"
     )
     .eq("is_active", true)
     .eq("is_invalid", false)
