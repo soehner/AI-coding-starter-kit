@@ -35,12 +35,18 @@ import {
   Upload,
   ExternalLink,
   Paperclip,
+  Pencil,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { BelegUploadDialog } from "@/components/beleg-upload-dialog"
+import { EditTransactionDialog } from "@/components/edit-transaction-dialog"
 import { isValidSeafileLink } from "@/lib/seafile-link"
-import type { Transaction, EditableTransactionField } from "@/lib/types"
+import type {
+  Transaction,
+  EditableTransactionField,
+  TransactionUpdateFields,
+} from "@/lib/types"
 
 interface TransactionTableProps {
   transactions: Transaction[]
@@ -55,6 +61,7 @@ interface TransactionTableProps {
   onSort: (field: string) => void
   onPageChange: (page: number) => void
   onUpdateTransaction?: (id: string, field: EditableTransactionField, value: string) => Promise<void>
+  onUpdateTransactionMulti?: (id: string, updates: TransactionUpdateFields) => Promise<void>
   onDocumentUploaded?: (transactionId: string, documentRef: string) => void
 }
 
@@ -124,15 +131,33 @@ export function TransactionTable({
   onSort,
   onPageChange,
   onUpdateTransaction,
+  onUpdateTransactionMulti,
   onDocumentUploaded,
 }: TransactionTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadTransaction, setUploadTransaction] = useState<Transaction | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editTransaction, setEditTransaction] = useState<Transaction | null>(null)
 
   const handleOpenUploadDialog = useCallback((transaction: Transaction) => {
     setUploadTransaction(transaction)
     setUploadDialogOpen(true)
   }, [])
+
+  const handleOpenEditDialog = useCallback((transaction: Transaction) => {
+    setEditTransaction(transaction)
+    setEditDialogOpen(true)
+  }, [])
+
+  const handleEditSave = useCallback(
+    async (id: string, updates: TransactionUpdateFields) => {
+      if (!onUpdateTransactionMulti) {
+        throw new Error("Bearbeitung ist nicht verfügbar.")
+      }
+      await onUpdateTransactionMulti(id, updates)
+    },
+    [onUpdateTransactionMulti]
+  )
 
   const handleUploadComplete = useCallback(
     (documentRef: string) => {
@@ -215,6 +240,9 @@ export function TransactionTable({
                     Auszug
                   </span>
                 </TableHead>
+                {canEdit && (
+                  <TableHead className="w-[60px] text-right">Aktion</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -223,7 +251,7 @@ export function TransactionTable({
               ) : transactions.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={canEdit ? 9 : 8}
                     className="h-32 text-center text-muted-foreground"
                   >
                     Keine Buchungen gefunden. Passen Sie die Filter an oder importieren Sie Kontoauszüge.
@@ -421,6 +449,28 @@ export function TransactionTable({
                           />
                         )}
                       </TableCell>
+
+                      {/* Aktion — Edit-Dialog öffnen */}
+                      {canEdit && (
+                        <TableCell className="text-right">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => handleOpenEditDialog(t)}
+                                  aria-label={`Buchung vom ${formatDate(t.booking_date)} bearbeiten`}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Buchung bearbeiten</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                      )}
                     </TableRow>
                   )
                 })
@@ -501,6 +551,14 @@ export function TransactionTable({
           onUploadComplete={handleUploadComplete}
         />
       )}
+
+      {/* Buchung-Bearbeiten-Dialog */}
+      <EditTransactionDialog
+        transaction={editTransaction}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSave={handleEditSave}
+      />
     </div>
   )
 }

@@ -98,7 +98,7 @@ export default function AdminKostenuebernahmenPage() {
     <div className="container px-4 py-8 md:px-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold tracking-tight">
-          Kostenübernahme-Anträge
+          Anträge auf Kostenübernahme
         </h2>
         <p className="text-sm text-muted-foreground">
           Übersicht aller eingereichten Anträge auf Kostenübernahme und deren

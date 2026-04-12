@@ -168,11 +168,34 @@ export interface ApprovalRequestWithDecisions extends ApprovalRequest {
 }
 
 // PROJ-5: Bearbeitbare Felder
-export type EditableTransactionField = "description" | "note" | "document_ref" | "statement_ref"
+export type EditableTransactionField =
+  | "description"
+  | "note"
+  | "document_ref"
+  | "statement_ref"
+  | "booking_date"
+  | "value_date"
+  | "amount"
+  | "balance_after"
+  | "category"
 
 export interface TransactionUpdatePayload {
   field: EditableTransactionField
   value: string
+}
+
+/**
+ * Felder, die per Multi-Update-Dialog gleichzeitig bearbeitet werden können.
+ * amount und balance_after sind Zahlen, alle Datumsfelder ISO-Strings.
+ */
+export interface TransactionUpdateFields {
+  booking_date?: string
+  value_date?: string
+  description?: string
+  amount?: number
+  balance_after?: number
+  category?: string | null
+  note?: string | null
 }
 
 export interface TransactionSummary {

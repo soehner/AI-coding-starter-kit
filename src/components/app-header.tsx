@@ -13,8 +13,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PasswordChangeDialog } from "@/components/password-change-dialog"
-import { CheckSquare, FileUp, LogOut, Settings, Shield, User, Users, ClipboardList } from "lucide-react"
+import {
+  CheckSquare,
+  ClipboardList,
+  FileUp,
+  Home,
+  LogOut,
+  Settings,
+  User,
+  Users,
+} from "lucide-react"
 import Link from "next/link"
 
 function getInitials(email: string): string {
@@ -33,16 +41,26 @@ function getRoleLabel(role: string): string {
 }
 
 export function AppHeader() {
-  const { user, profile, isLoading, signOut, updatePassword, isAdmin, hasPermission } = useAuth()
+  const { user, profile, isLoading, signOut, isAdmin, hasPermission } =
+    useAuth()
+
+  const canImport = hasPermission("import_statements")
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center justify-between px-4 md:px-6">
+      <div className="container flex h-14 items-center justify-between gap-2 px-4 md:px-6">
         <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold">CBS-Finanz</h1>
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 text-lg font-semibold transition-colors hover:text-primary"
+            aria-label="Zum Dashboard"
+          >
+            <Home className="h-5 w-5" />
+            <span>CBS-Finanz</span>
+          </Link>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {isLoading ? (
             <div className="flex items-center gap-2">
               <Skeleton className="h-5 w-24" />
@@ -50,6 +68,34 @@ export function AppHeader() {
             </div>
           ) : user && profile ? (
             <>
+              {/* Primäre Aktionen — im Desktop-Header sichtbar */}
+              <nav className="hidden items-center gap-1 md:flex">
+                {canImport && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/dashboard/admin/import">
+                      <FileUp className="mr-2 h-4 w-4" />
+                      Kontoauszug importieren
+                    </Link>
+                  </Button>
+                )}
+                {isAdmin && (
+                  <>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href="/dashboard/admin/genehmigungen">
+                        <CheckSquare className="mr-2 h-4 w-4" />
+                        Genehmigungen
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link href="/dashboard/admin/kostenuebernahmen">
+                        <ClipboardList className="mr-2 h-4 w-4" />
+                        Anträge auf Kostenübernahme
+                      </Link>
+                    </Button>
+                  </>
+                )}
+              </nav>
+
               <Badge
                 variant={profile.role === "admin" ? "default" : "secondary"}
                 className="hidden sm:inline-flex"
@@ -86,8 +132,16 @@ export function AppHeader() {
                     <User className="mr-2 h-4 w-4" />
                     {getRoleLabel(profile.role)}
                   </DropdownMenuItem>
-                  {hasPermission("import_statements") && (
-                    <DropdownMenuItem asChild>
+
+                  {/* Mobile-Fallback: Primäre Aktionen auch im Menü */}
+                  <DropdownMenuItem asChild className="md:hidden">
+                    <Link href="/dashboard">
+                      <Home className="mr-2 h-4 w-4" />
+                      Dashboard
+                    </Link>
+                  </DropdownMenuItem>
+                  {canImport && (
+                    <DropdownMenuItem asChild className="md:hidden">
                       <Link href="/dashboard/admin/import">
                         <FileUp className="mr-2 h-4 w-4" />
                         Kontoauszug importieren
@@ -96,40 +150,32 @@ export function AppHeader() {
                   )}
                   {isAdmin && (
                     <>
-                      <DropdownMenuItem asChild>
+                      <DropdownMenuItem asChild className="md:hidden">
                         <Link href="/dashboard/admin/genehmigungen">
                           <CheckSquare className="mr-2 h-4 w-4" />
                           Genehmigungen
                         </Link>
                       </DropdownMenuItem>
+                      <DropdownMenuItem asChild className="md:hidden">
+                        <Link href="/dashboard/admin/kostenuebernahmen">
+                          <ClipboardList className="mr-2 h-4 w-4" />
+                          Anträge auf Kostenübernahme
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator className="md:hidden" />
                       <DropdownMenuItem asChild>
                         <Link href="/dashboard/admin/users">
                           <Users className="mr-2 h-4 w-4" />
                           Benutzerverwaltung
                         </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/dashboard/admin/kostenuebernahmen">
-                          <ClipboardList className="mr-2 h-4 w-4" />
-                          Kostenübernahmen
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/dashboard/admin/settings">
-                          <Settings className="mr-2 h-4 w-4" />
-                          Einstellungen
-                        </Link>
-                      </DropdownMenuItem>
                     </>
                   )}
                   <DropdownMenuItem asChild>
-                    <Link href="/dashboard/sicherheit">
-                      <Shield className="mr-2 h-4 w-4" />
-                      Sicherheitseinstellungen
+                    <Link href="/dashboard/einstellungen">
+                      <Settings className="mr-2 h-4 w-4" />
+                      Einstellungen
                     </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild onSelect={(e) => e.preventDefault()}>
-                    <PasswordChangeDialog onUpdatePassword={updatePassword} />
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

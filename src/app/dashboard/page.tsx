@@ -16,6 +16,7 @@ import type {
   TransactionSummary,
   Transaction,
   EditableTransactionField,
+  TransactionUpdateFields,
 } from "@/lib/types"
 
 export default function DashboardPage() {
@@ -105,38 +106,37 @@ export default function DashboardPage() {
     checkSeafile()
   }, [authLoading, hasPermission])
 
+  // Summary-Fetcher als useCallback, damit er auch aus Event-Handlern
+  // (Multi-Field-Edit) aufgerufen werden kann.
+  const fetchSummary = useCallback(async () => {
+    setSummaryLoading(true)
+    setSummaryError(null)
+
+    try {
+      const params = new URLSearchParams()
+      if (year !== "all") params.set("year", year)
+      if (month !== "all") params.set("month", month)
+      if (debouncedSearch) params.set("search", debouncedSearch)
+
+      const res = await fetch(`/api/transactions/summary?${params}`)
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Fehler beim Laden der Zusammenfassung")
+      }
+      const data: TransactionSummary = await res.json()
+      setSummary(data)
+    } catch (err) {
+      setSummaryError(err instanceof Error ? err.message : "Unbekannter Fehler")
+    } finally {
+      setSummaryLoading(false)
+    }
+  }, [year, month, debouncedSearch])
+
   // Summary laden
   useEffect(() => {
     if (authLoading) return
-
-    const fetchSummary = async () => {
-      setSummaryLoading(true)
-      setSummaryError(null)
-
-      try {
-        const params = new URLSearchParams()
-        if (year !== "all") params.set("year", year)
-        if (month !== "all") params.set("month", month)
-        if (debouncedSearch) params.set("search", debouncedSearch)
-
-        const res = await fetch(`/api/transactions/summary?${params}`)
-        if (!res.ok) {
-          const data = await res.json()
-          throw new Error(data.error || "Fehler beim Laden der Zusammenfassung")
-        }
-        const data: TransactionSummary = await res.json()
-        setSummary(data)
-      } catch (err) {
-        setSummaryError(
-          err instanceof Error ? err.message : "Unbekannter Fehler"
-        )
-      } finally {
-        setSummaryLoading(false)
-      }
-    }
-
     fetchSummary()
-  }, [year, month, debouncedSearch, authLoading])
+  }, [authLoading, fetchSummary])
 
   // Transaktionen laden
   useEffect(() => {
@@ -222,6 +222,34 @@ export default function DashboardPage() {
       }
     },
     [transactions]
+  )
+
+  // Multi-Field-Update aus dem Bearbeiten-Dialog
+  const handleUpdateTransactionMulti = useCallback(
+    async (id: string, updates: TransactionUpdateFields) => {
+      const res = await fetch(`/api/transactions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Fehler beim Speichern der Buchung")
+      }
+
+      const updated: Transaction = await res.json()
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === id ? updated : t))
+      )
+
+      // Summen (Saldo, Einnahmen, Ausgaben) im Header nach Betragsänderung
+      // aktualisieren
+      fetchSummary()
+
+      toast.success("Buchung gespeichert")
+    },
+    [fetchSummary]
   )
 
   // PROJ-9: Handler für Beleg-Upload - aktualisiert document_ref lokal
@@ -358,6 +386,7 @@ export default function DashboardPage() {
         onSort={handleSort}
         onPageChange={handlePageChange}
         onUpdateTransaction={handleUpdateTransaction}
+        onUpdateTransactionMulti={handleUpdateTransactionMulti}
         onDocumentUploaded={handleDocumentUploaded}
       />
     </div>

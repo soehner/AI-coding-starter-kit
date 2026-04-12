@@ -182,7 +182,7 @@ export function PdfUploadZone({
           <AlertDescription>
             Bitte KI-API-Token in den{" "}
             <a
-              href="/dashboard/admin/settings"
+              href="/dashboard/einstellungen"
               className="font-medium underline underline-offset-4"
             >
               Einstellungen

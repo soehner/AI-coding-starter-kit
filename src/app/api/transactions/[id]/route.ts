@@ -3,6 +3,10 @@ import { createServerSupabaseClient } from "@/lib/supabase-server"
 import { requirePermission } from "@/lib/require-permission"
 import { z } from "zod"
 
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Datum muss im Format YYYY-MM-DD sein")
+
 const transactionUpdateSchema = z.object({
   description: z
     .string()
@@ -12,6 +16,7 @@ const transactionUpdateSchema = z.object({
   note: z
     .string()
     .max(1000, "Bemerkung darf maximal 1000 Zeichen lang sein")
+    .nullable()
     .optional(),
   document_ref: z
     .string()
@@ -21,10 +26,39 @@ const transactionUpdateSchema = z.object({
     .string()
     .max(255, "Kontoauszug-Referenz darf maximal 255 Zeichen lang sein")
     .optional(),
+  booking_date: isoDate.optional(),
+  value_date: isoDate.optional(),
+  amount: z
+    .number()
+    .finite("Betrag muss eine gültige Zahl sein")
+    .min(-1_000_000, "Betrag außerhalb des erlaubten Bereichs")
+    .max(1_000_000, "Betrag außerhalb des erlaubten Bereichs")
+    .optional(),
+  balance_after: z
+    .number()
+    .finite("Saldo muss eine gültige Zahl sein")
+    .min(-1_000_000, "Saldo außerhalb des erlaubten Bereichs")
+    .max(1_000_000, "Saldo außerhalb des erlaubten Bereichs")
+    .optional(),
+  category: z
+    .string()
+    .max(100, "Kategorie darf maximal 100 Zeichen lang sein")
+    .nullable()
+    .optional(),
 })
 
 // Erlaubte Felder für das Update (schreibgeschützte Bankdaten ausgeschlossen)
-const ALLOWED_FIELDS = ["description", "note", "document_ref", "statement_ref"]
+const ALLOWED_FIELDS = [
+  "description",
+  "note",
+  "document_ref",
+  "statement_ref",
+  "booking_date",
+  "value_date",
+  "amount",
+  "balance_after",
+  "category",
+]
 
 export async function PATCH(
   request: Request,
