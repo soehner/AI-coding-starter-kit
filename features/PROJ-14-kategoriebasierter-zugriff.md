@@ -1,6 +1,6 @@
 # PROJ-14: Kategoriebasierter Zugriff für Betrachter
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-12
 **Zuletzt aktualisiert:** 2026-04-12
 
