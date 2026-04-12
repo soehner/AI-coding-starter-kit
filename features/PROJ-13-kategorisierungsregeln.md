@@ -1,6 +1,6 @@
 # PROJ-13: Automatische Kategorisierungsregeln
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-12
 **Zuletzt aktualisiert:** 2026-04-12
 
@@ -282,4 +282,14 @@ JSONB-Bedingungen je Typ:
 Statische Code-Analyse: shadcn/ui-Komponenten werden durchgängig verwendet, responsive Klassen (`sm:`, `max-w-*`, `grid-cols-*`) sind vorhanden, Drag-Handle hat `touch-none`. Manuelles Testen in Chrome/Firefox/Safari und auf 375/768/1440 px wurde nicht durchgeführt (keine Live-Umgebung) — empfohlen vor dem Deploy.
 
 ## Deployment
-_Wird von /deploy hinzugefügt_
+
+- **Produktions-URL:** https://cbs-finanz.vercel.app
+- **Deployt am:** 2026-04-12
+- **Commit:** `f0ec3e0` – feat(PROJ-13): Automatische Kategorisierungsregeln
+- **Migrationen eingespielt:**
+  - `014_proj13_categorization_rules.sql` (Tabelle, RLS, Trigger)
+  - `015_proj13_bug002_counterpart.sql` (Spalte `transactions.counterpart`)
+  - `016_proj13_bug007_atomic_rule_insert.sql` (RPC mit Advisory-Lock)
+- **Vercel-Build:** erfolgreich (State `READY`)
+- **Smoke-Test:** `/` → 307 (Redirect zu Login), `/login` → 200
+- **Offene Follow-ups:** keine kritischen. Optional: counterpart-Backfill für Altdaten per erneutem Import, UI-Anzeige der `counterpart`-Spalte in der Buchungstabelle.
