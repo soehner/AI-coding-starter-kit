@@ -43,6 +43,22 @@ export async function POST(request: Request) {
   const { profile } = authResult
   const adminClient = createAdminSupabaseClient()
 
+  // PostgreSQL-Fehler in eine verständliche deutsche Meldung übersetzen
+  function describeDbError(err: { code?: string; message?: string }): string {
+    if (err.code === "23505") {
+      // unique_violation — z.B. schon vorhandener Kontoauszug oder Buchung
+      return "Eintrag existiert bereits in der Datenbank (Duplikat)."
+    }
+    if (err.code === "23503") {
+      // foreign_key_violation
+      return "Abhängiger Datensatz fehlt (Foreign-Key-Verletzung)."
+    }
+    if (err.code === "23502") {
+      return "Pflichtfeld fehlt (NOT-NULL-Verletzung)."
+    }
+    return err.message || "Unbekannter Datenbankfehler."
+  }
+
   // 1. Bank-Statement Eintrag erstellen
   const { data: statement, error: statementError } = await adminClient
     .from("bank_statements")
@@ -60,9 +76,17 @@ export async function POST(request: Request) {
     .single()
 
   if (statementError || !statement) {
-    console.error("Fehler beim Erstellen des Kontoauszugs:", statementError?.message)
+    console.error(
+      "Fehler beim Erstellen des Kontoauszugs:",
+      statementError?.code,
+      statementError?.message
+    )
     return NextResponse.json(
-      { error: "Kontoauszug konnte nicht gespeichert werden." },
+      {
+        error: `Kontoauszug konnte nicht gespeichert werden: ${describeDbError(
+          statementError ?? {}
+        )}`,
+      },
       { status: 500 }
     )
   }
@@ -82,16 +106,21 @@ export async function POST(request: Request) {
     .insert(transactionRows)
 
   if (txError) {
-    console.error("Fehler beim Einfügen der Buchungen:", txError.message)
+    console.error(
+      "Fehler beim Einfügen der Buchungen:",
+      txError.code,
+      txError.message
+    )
 
     // Kontoauszug-Eintrag wieder löschen (Rollback)
-    await adminClient
-      .from("bank_statements")
-      .delete()
-      .eq("id", statement.id)
+    await adminClient.from("bank_statements").delete().eq("id", statement.id)
 
     return NextResponse.json(
-      { error: "Buchungen konnten nicht gespeichert werden." },
+      {
+        error: `Buchungen konnten nicht gespeichert werden: ${describeDbError(
+          txError
+        )}`,
+      },
       { status: 500 }
     )
   }

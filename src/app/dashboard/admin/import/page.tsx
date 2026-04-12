@@ -113,44 +113,35 @@ export default function AdminImportPage() {
     setSeafileWarning(warnings.length > 0 ? warnings.join(" | ") : null)
   }
 
-  async function handleConfirmAll(batch: StatementConfirmation[]) {
-    // Alle Statements sequenziell speichern. Bei einem Fehler stoppen und
-    // dem User den fehlgeschlagenen Kontoauszug nennen.
-    let savedStatements = 0
-    let savedTransactions = 0
+  async function handleConfirmSingle({ result, transactions }: StatementConfirmation) {
+    const response = await fetch("/api/admin/import/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        statement_number: result.statement_number,
+        statement_date: result.statement_date,
+        file_name: result.file_name,
+        file_path: result.file_path,
+        start_balance: result.start_balance,
+        end_balance: result.end_balance,
+        transactions,
+      }),
+    })
 
-    for (const { result, transactions } of batch) {
-      const response = await fetch("/api/admin/import/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          statement_number: result.statement_number,
-          statement_date: result.statement_date,
-          file_name: result.file_name,
-          file_path: result.file_path,
-          start_balance: result.start_balance,
-          end_balance: result.end_balance,
-          transactions,
-        }),
-      })
+    const data = await response.json()
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(
-          `Kontoauszug ${result.statement_number}: ${data.error || "Fehler beim Speichern der Buchungen."}`
-        )
-      }
-
-      savedStatements += 1
-      savedTransactions += transactions.length
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Fehler beim Speichern der Buchungen."
+      )
     }
+  }
 
-    // Erfolg: Vorschau schließen und Liste aktualisieren
+  function handleAllSaved(savedCount: number, transactionCount: number) {
     setParseResults(null)
     setSaveSuccess(
-      `${savedTransactions} Buchungen aus ${savedStatements} ${
-        savedStatements === 1 ? "Kontoauszug" : "Kontoauszügen"
+      `${transactionCount} Buchungen aus ${savedCount} ${
+        savedCount === 1 ? "Kontoauszug" : "Kontoauszügen"
       } erfolgreich gespeichert.`
     )
     fetchStatements()
@@ -204,7 +195,8 @@ export default function AdminImportPage() {
         {parseResults && (
           <MultiStatementPreview
             results={parseResults}
-            onConfirmAll={handleConfirmAll}
+            onConfirmSingle={handleConfirmSingle}
+            onAllSaved={handleAllSaved}
             onCancel={handleCancel}
           />
         )}
