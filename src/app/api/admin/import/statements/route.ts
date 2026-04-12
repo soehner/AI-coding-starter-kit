@@ -15,12 +15,17 @@ export async function GET() {
 
   const adminClient = createAdminSupabaseClient()
 
+  // Sortierung nach Kontoauszugs-Datum absteigend, damit der neueste
+  // Auszug (und damit die höchste Nr.) ganz oben steht. Bei identischem
+  // Datum sekundär nach statement_number absteigend, damit die Reihenfolge
+  // deterministisch bleibt.
   const { data: statements, error } = await adminClient
     .from("bank_statements")
     .select(
       "id, file_name, statement_date, statement_number, transaction_count, file_path, uploaded_by, created_at"
     )
-    .order("created_at", { ascending: false })
+    .order("statement_date", { ascending: false })
+    .order("statement_number", { ascending: false })
     .limit(100)
 
   if (error) {
