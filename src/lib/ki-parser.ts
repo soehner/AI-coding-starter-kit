@@ -15,6 +15,7 @@ Regeln:
 - Anfangs- und Endsaldo extrahieren
 - Buchungstext ("description") vollständig übernehmen (inkl. Verwendungszweck, IBAN, Referenznummern etc.)
 - Name des Auftraggebers/Empfängers separat in "counterpart" extrahieren (z.B. "Stadtwerke Mannheim GmbH", "Max Mustermann"). Wenn kein eindeutiger Name erkennbar ist, "counterpart" auf null setzen.
+- IBAN des Zahlungspartners (Gegenseite) separat in "counterpart_iban" extrahieren. Das ist die IBAN der ANDEREN Partei (nicht das Vereinskonto selbst). Suche im Verwendungszweck, in "Auftraggeber"-Zeilen oder in Zahlungsreferenzen nach einer IBAN (22 Zeichen, beginnt mit "DE" oder einem anderen 2-stelligen Länder-Code). Formatierung: Großbuchstaben, ohne Leerzeichen, ohne Trennstriche. Wenn keine IBAN des Partners erkennbar ist, "counterpart_iban" auf null setzen.
 - Jede Buchung bekommt eine fortlaufende ID (tx-1, tx-2, ...)
 
 Antwort NUR als valides JSON im folgenden Format (keine Erklärung, kein Markdown):
@@ -30,6 +31,7 @@ Antwort NUR als valides JSON im folgenden Format (keine Erklärung, kein Markdow
       "value_date": "2026-01-02",
       "description": "SEPA-Lastschrift Strom Dez 2025 DE89370400440532013000",
       "counterpart": "Stadtwerke Mannheim GmbH",
+      "counterpart_iban": "DE89370400440532013000",
       "amount": -89.50,
       "balance_after": 12256.17
     }

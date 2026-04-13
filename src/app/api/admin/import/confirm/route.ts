@@ -3,6 +3,8 @@ import { requirePermission } from "@/lib/require-permission"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { confirmImportSchema } from "@/lib/validations/import"
 import { applyCategorizationRules } from "@/lib/categorization-rules"
+import { pruefeAbgleich } from "@/lib/psd2/matching-engine"
+import { berechneMatchingHash, euroZuCent } from "@/lib/psd2/matching-hash"
 
 /**
  * POST /api/admin/import/confirm
@@ -92,41 +94,167 @@ export async function POST(request: Request) {
     )
   }
 
-  // 2. Buchungen einfügen
-  const transactionRows = transactions.map((tx) => ({
-    statement_id: statement.id,
-    booking_date: tx.booking_date,
-    value_date: tx.value_date,
-    description: tx.description,
-    counterpart: tx.counterpart ?? null,
-    amount: tx.amount,
-    balance_after: tx.balance_after,
-  }))
+  // 2. Buchungen einfügen — mit PROJ-16-Abgleich:
+  // Fuer jeden Eintrag wird der Matching-Hash berechnet und gegen bereits
+  // vorhandene PSD2-Eintraege geprueft. Treffer werden gemerged / als
+  // Vorschlag / Konflikt markiert statt als Neueintrag angelegt.
+  const insertedIdsAkkumuliert: string[] = []
+  let bestaetigt = 0
+  let vorschlaege = 0
+  let konflikte = 0
+  let neuAngelegt = 0
+  let abgleichWarning: string | null = null
 
-  const { data: insertedTxs, error: txError } = await adminClient
-    .from("transactions")
-    .insert(transactionRows)
-    .select("id")
+  try {
+    for (const tx of transactions) {
+      // PROJ-16 / M1: IBAN der Gegenseite aus dem KI-Parser normalisieren
+      // (Großbuchstaben, keine Leerzeichen). Leere Werte → null, damit der
+      // Fuzzy-Match korrekt greift.
+      const ibanGegenseite = tx.counterpart_iban
+        ? tx.counterpart_iban.toUpperCase().replace(/\s+/g, "")
+        : null
 
-  if (txError) {
-    console.error(
-      "Fehler beim Einfügen der Buchungen:",
-      txError.code,
-      txError.message
-    )
+      const ergebnis = await pruefeAbgleich(adminClient, {
+        booking_date: tx.booking_date,
+        value_date: tx.value_date,
+        description: tx.description,
+        counterpart: tx.counterpart ?? null,
+        amount: tx.amount,
+        balance_after: tx.balance_after,
+        iban_gegenseite: ibanGegenseite,
+      })
+
+      if (ergebnis.aktion === "bestaetigt" && ergebnis.kandidat) {
+        // Exakter Hash-Match mit existierendem PSD2-Eintrag → mergen.
+        const { error: updErr } = await adminClient
+          .from("transactions")
+          .update({
+            // PDF ist Source of Truth → Felder vom PDF uebernehmen
+            statement_id: statement.id,
+            booking_date: tx.booking_date,
+            value_date: tx.value_date,
+            description: tx.description,
+            counterpart: tx.counterpart ?? null,
+            iban_gegenseite: ibanGegenseite,
+            amount: tx.amount,
+            balance_after: tx.balance_after,
+            quelle: "beide",
+            status: "bestaetigt",
+            matching_hash: ergebnis.hash,
+          })
+          .eq("id", ergebnis.kandidat.id)
+        if (updErr) throw new Error(updErr.message)
+        insertedIdsAkkumuliert.push(ergebnis.kandidat.id)
+        bestaetigt++
+        continue
+      }
+
+      if (ergebnis.aktion === "konflikt" && ergebnis.kandidat) {
+        // Betrag weicht ab → PDF gewinnt, alten PSD2-Wert sichern
+        const { data: alterEintrag } = await adminClient
+          .from("transactions")
+          .select("amount, booking_date, description, counterpart, psd2_original_data")
+          .eq("id", ergebnis.kandidat.id)
+          .single()
+
+        const { error: updErr } = await adminClient
+          .from("transactions")
+          .update({
+            statement_id: statement.id,
+            booking_date: tx.booking_date,
+            value_date: tx.value_date,
+            description: tx.description,
+            counterpart: tx.counterpart ?? null,
+            iban_gegenseite: ibanGegenseite,
+            amount: tx.amount,
+            balance_after: tx.balance_after,
+            quelle: "beide",
+            status: "konflikt",
+            matching_hash: berechneMatchingHash({
+              buchungsdatum: tx.booking_date,
+              betrag_cent: euroZuCent(tx.amount),
+              iban_gegenseite: ibanGegenseite,
+              verwendungszweck: tx.description,
+            }),
+            psd2_original_data: alterEintrag ?? null,
+          })
+          .eq("id", ergebnis.kandidat.id)
+        if (updErr) throw new Error(updErr.message)
+        insertedIdsAkkumuliert.push(ergebnis.kandidat.id)
+        konflikte++
+        continue
+      }
+
+      if (ergebnis.aktion === "vorschlag" && ergebnis.kandidat) {
+        // Neuer PDF-Eintrag anlegen, beide als Vorschlag markieren
+        const { data: neu, error: insErr } = await adminClient
+          .from("transactions")
+          .insert({
+            statement_id: statement.id,
+            booking_date: tx.booking_date,
+            value_date: tx.value_date,
+            description: tx.description,
+            counterpart: tx.counterpart ?? null,
+            iban_gegenseite: ibanGegenseite,
+            amount: tx.amount,
+            balance_after: tx.balance_after,
+            matching_hash: ergebnis.hash,
+            quelle: "pdf",
+            status: "vorschlag",
+          })
+          .select("id")
+          .single()
+        if (insErr || !neu) throw new Error(insErr?.message ?? "Insert fehlgeschlagen.")
+
+        await adminClient
+          .from("transactions")
+          .update({ status: "vorschlag" })
+          .eq("id", ergebnis.kandidat.id)
+
+        insertedIdsAkkumuliert.push(neu.id as string)
+        vorschlaege++
+        continue
+      }
+
+      // Default: neuer PDF-Eintrag
+      const { data: neu, error: insErr } = await adminClient
+        .from("transactions")
+        .insert({
+          statement_id: statement.id,
+          booking_date: tx.booking_date,
+          value_date: tx.value_date,
+          description: tx.description,
+          counterpart: tx.counterpart ?? null,
+          iban_gegenseite: ibanGegenseite,
+          amount: tx.amount,
+          balance_after: tx.balance_after,
+          matching_hash: ergebnis.hash,
+          quelle: "pdf",
+          status: "nur_pdf",
+        })
+        .select("id")
+        .single()
+      if (insErr || !neu) throw new Error(insErr?.message ?? "Insert fehlgeschlagen.")
+      insertedIdsAkkumuliert.push(neu.id as string)
+      neuAngelegt++
+    }
+  } catch (err) {
+    const meldung = err instanceof Error ? err.message : "Unbekannter Fehler."
+    console.error("Fehler beim Einfuegen der Buchungen:", meldung)
 
     // Kontoauszug-Eintrag wieder löschen (Rollback)
     await adminClient.from("bank_statements").delete().eq("id", statement.id)
 
     return NextResponse.json(
-      {
-        error: `Buchungen konnten nicht gespeichert werden: ${describeDbError(
-          txError
-        )}`,
-      },
+      { error: `Buchungen konnten nicht gespeichert werden: ${meldung}` },
       { status: 500 }
     )
   }
+
+  // Referenzvoid-Use, um unbenutzte Warnung fuer describeDbError zu vermeiden
+  void describeDbError
+
+  const insertedTxs = insertedIdsAkkumuliert.map((id) => ({ id }))
 
   // PROJ-13: Automatische Kategorisierung der frisch importierten Buchungen.
   // Fehler in der Regelanwendung dürfen den erfolgreichen Import NICHT rückgängig
@@ -157,6 +285,13 @@ export async function POST(request: Request) {
       auto_categorized: autoCategorized,
       auto_assignments: autoAssignments,
       rules_warning: rulesWarning,
+      // PROJ-16: Abgleichs-Kennzahlen
+      psd2_abgleich: {
+        bestaetigt,
+        vorschlaege,
+        konflikte,
+        neu_angelegt: neuAngelegt,
+      },
     },
     { status: 201 }
   )

@@ -48,6 +48,14 @@ export const confirmImportSchema = z.object({
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Wertstellungsdatum muss im Format YYYY-MM-DD sein."),
         description: z.string().min(1, "Buchungstext ist erforderlich."),
         counterpart: z.string().max(300).nullable().optional(),
+        // PROJ-16 / M1: IBAN der Gegenseite (max. 34 Zeichen laut ISO 13616),
+        // wird vom KI-Parser aus Verwendungszweck/Buchungstext extrahiert
+        // und fließt in den matching_hash ein.
+        counterpart_iban: z
+          .string()
+          .max(34, "IBAN darf maximal 34 Zeichen lang sein.")
+          .nullable()
+          .optional(),
         amount: z.number(),
         balance_after: z.number(),
       })
