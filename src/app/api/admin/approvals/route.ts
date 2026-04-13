@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
     }
 
     const year = new Date().getFullYear().toString()
-    const basePath = "/Förderverein/Genehmigungen/"
+    const basePath = "/CBS-Finanz-Data/Genehmigungen/"
     const timestampPrefix = new Date().toISOString().split("T")[0]
 
     for (const file of files) {

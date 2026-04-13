@@ -224,7 +224,7 @@ export async function POST(
       try {
         const upload = await uploadToSeafile(
           seafileSetup.config,
-          "/Förderverein/Genehmigungen/",
+          "/CBS-Finanz-Data/Genehmigungen/",
           year,
           finalName,
           buffer,
