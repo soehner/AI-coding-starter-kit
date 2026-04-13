@@ -49,12 +49,15 @@ export function KpiCards({
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Finanz-Kennzahlen">
-      <Card>
+      <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/5 via-card to-card shadow-sm">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary to-primary/40" aria-hidden="true" />
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             Aktueller Kontostand
           </CardTitle>
-          <Wallet className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+            <Wallet className="h-4 w-4 text-primary" aria-hidden="true" />
+          </div>
         </CardHeader>
         <CardContent>
           <p
@@ -68,16 +71,19 @@ export function KpiCards({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="relative overflow-hidden border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-card to-card shadow-sm">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-500/40" aria-hidden="true" />
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             Einnahmen (Zeitraum)
           </CardTitle>
-          <TrendingUp className="h-4 w-4 text-green-600" aria-hidden="true" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10">
+            <TrendingUp className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+          </div>
         </CardHeader>
         <CardContent>
           <p
-            className="text-2xl font-bold text-green-600"
+            className="text-2xl font-bold text-emerald-600"
             aria-label={`Einnahmen: ${formatCurrency(totalIncome)}`}
           >
             {formatCurrency(totalIncome)}
@@ -85,16 +91,19 @@ export function KpiCards({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="relative overflow-hidden border-rose-500/20 bg-gradient-to-br from-rose-500/5 via-card to-card shadow-sm">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-rose-500 to-rose-500/40" aria-hidden="true" />
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
             Ausgaben (Zeitraum)
           </CardTitle>
-          <TrendingDown className="h-4 w-4 text-red-600" aria-hidden="true" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-500/10">
+            <TrendingDown className="h-4 w-4 text-rose-600" aria-hidden="true" />
+          </div>
         </CardHeader>
         <CardContent>
           <p
-            className="text-2xl font-bold text-red-600"
+            className="text-2xl font-bold text-rose-600"
             aria-label={`Ausgaben: ${formatCurrency(totalExpenses)}`}
           >
             {formatCurrency(totalExpenses)}

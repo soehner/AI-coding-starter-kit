@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, AlertCircle } from "lucide-react"
+import Image from "next/image"
 
 const loginSchema = z.object({
   email: z.email("Bitte geben Sie eine gültige E-Mail-Adresse ein."),
@@ -137,9 +138,21 @@ export function LoginForm({ callbackError }: LoginFormProps) {
   }
 
   return (
-    <Card className="w-full max-w-md">
+    <Card className="w-full max-w-md border-primary/10 shadow-xl shadow-primary/5">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl font-bold">CBS-Finanz</CardTitle>
+        <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-secondary p-3 ring-1 ring-primary/20">
+          <Image
+            src="/logo.png"
+            alt="CBS-Mannheim Förderverein Logo"
+            width={96}
+            height={96}
+            priority
+            className="h-auto w-auto max-h-20 max-w-20 object-contain"
+          />
+        </div>
+        <CardTitle className="bg-gradient-to-r from-foreground to-primary bg-clip-text text-2xl font-bold text-transparent">
+          CBS-Finanz
+        </CardTitle>
         <CardDescription>
           Melden Sie sich mit Ihren Zugangsdaten an.
         </CardDescription>

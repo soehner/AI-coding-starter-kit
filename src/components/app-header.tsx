@@ -24,6 +24,7 @@ import {
   Users,
 } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 
 function getInitials(email: string): string {
   return email.substring(0, 2).toUpperCase()
@@ -47,16 +48,26 @@ export function AppHeader() {
   const canImport = hasPermission("import_statements")
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center justify-between gap-2 px-4 md:px-6">
+    <header className="sticky top-0 z-50 w-full border-b border-primary/10 bg-background/95 shadow-sm shadow-primary/5 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+      <div className="container flex h-16 items-center justify-between gap-2 px-4 md:px-6">
         <div className="flex items-center gap-2">
           <Link
             href="/dashboard"
-            className="flex items-center gap-2 text-lg font-semibold transition-colors hover:text-primary"
+            className="flex items-center gap-3 text-lg font-semibold transition-opacity hover:opacity-80"
             aria-label="Zum Dashboard"
           >
-            <Home className="h-5 w-5" />
-            <span>CBS-Finanz</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary/15 to-secondary ring-1 ring-primary/20">
+              <Image
+                src="/icon.png"
+                alt=""
+                width={32}
+                height={32}
+                className="h-7 w-7 object-contain"
+              />
+            </div>
+            <span className="bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
+              CBS-Finanz
+            </span>
           </Link>
         </div>
 

@@ -14,7 +14,7 @@ export default async function LoginPage({
 }) {
   const params = await searchParams
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-12">
+    <main className="bg-brand-soft relative flex min-h-screen items-center justify-center px-4 py-12">
       <LoginForm callbackError={params.error === "auth_callback_error"} />
     </main>
   )
