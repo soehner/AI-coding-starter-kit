@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/psd2-abruf",
+      "schedule": "0 5 * * *"
+    }
+  ]
+}

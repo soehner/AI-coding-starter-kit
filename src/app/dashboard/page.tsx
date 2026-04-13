@@ -11,6 +11,8 @@ import { TransactionTable } from "@/components/transaction-table"
 import { KassenbuchExportButton } from "@/components/kassenbuch-export-button"
 import { BulkKategorisierungDialog } from "@/components/bulk-kategorisierung-dialog"
 import { EingeschraenkteBetrachterBanner } from "@/components/eingeschraenkte-betrachter-banner"
+import { Psd2ConsentBanner } from "@/components/psd2-consent-banner"
+import { TransactionAbgleichDialog } from "@/components/transaction-abgleich-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -60,6 +62,14 @@ export default function DashboardPage() {
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
   const allCategories = useCategories()
 
+  // PROJ-16: Abgleich-Filter & Dialog
+  const [onlyUnconfirmed, setOnlyUnconfirmed] = useState(
+    searchParams.get("only_unconfirmed") === "true"
+  )
+  const [abgleichTransaction, setAbgleichTransaction] =
+    useState<Transaction | null>(null)
+  const [abgleichDialogOpen, setAbgleichDialogOpen] = useState(false)
+
   // Daten-State
   const [summary, setSummary] = useState<TransactionSummary | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -99,8 +109,18 @@ export default function DashboardPage() {
       page: page.toString(),
       sort: sortBy,
       dir: sortDir,
+      only_unconfirmed: onlyUnconfirmed ? "true" : "",
     })
-  }, [year, month, debouncedSearch, page, sortBy, sortDir, updateUrl])
+  }, [
+    year,
+    month,
+    debouncedSearch,
+    page,
+    sortBy,
+    sortDir,
+    onlyUnconfirmed,
+    updateUrl,
+  ])
 
   // PROJ-14: Kategorie-Einschränkung des eingeloggten Benutzers laden
   // (nur für Betrachter relevant – Admins erhalten vom Backend restricted: false)
@@ -203,6 +223,9 @@ export default function DashboardPage() {
       if (categoryFilter.length > 0) {
         params.set("categories", categoryFilter.join(","))
       }
+      if (onlyUnconfirmed) {
+        params.set("only_unconfirmed", "true")
+      }
       params.set("page", page.toString())
       params.set("sort", sortBy)
       params.set("dir", sortDir)
@@ -222,7 +245,7 @@ export default function DashboardPage() {
     } finally {
       setTableLoading(false)
     }
-  }, [year, month, debouncedSearch, categoryFilter, page, sortBy, sortDir])
+  }, [year, month, debouncedSearch, categoryFilter, onlyUnconfirmed, page, sortBy, sortDir])
 
   useEffect(() => {
     if (authLoading) return
@@ -452,6 +475,9 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* PROJ-16: Warnbanner bei bald ablaufender PSD2-Zustimmung (nur Admins) */}
+      <Psd2ConsentBanner />
+
       {/* PROJ-14: Hinweisbanner für eingeschränkte Betrachter */}
       {categoryAccess?.restricted && (
         <EingeschraenkteBetrachterBanner
@@ -484,11 +510,17 @@ export default function DashboardPage() {
             searchValue={search}
             allCategories={allCategories}
             selectedCategoryFilter={categoryFilter}
+            onlyUnconfirmed={onlyUnconfirmed}
+            showUnconfirmedToggle
             onYearChange={handleYearChange}
             onMonthChange={handleMonthChange}
             onSearchChange={handleSearchChange}
             onCategoryFilterChange={(v) => {
               setCategoryFilter(v)
+              setPage(1)
+            }}
+            onOnlyUnconfirmedChange={(value) => {
+              setOnlyUnconfirmed(value)
               setPage(1)
             }}
           />
@@ -548,7 +580,23 @@ export default function DashboardPage() {
           hasPermission("edit_transactions") ? handleUpdateCategories : undefined
         }
         onDocumentUploaded={handleDocumentUploaded}
+        onAbgleichOpen={(tx) => {
+          setAbgleichTransaction(tx)
+          setAbgleichDialogOpen(true)
+        }}
         allCategories={allCategories}
+      />
+
+      {/* PROJ-16: Abgleich-Dialog für Vorschläge/Konflikte */}
+      <TransactionAbgleichDialog
+        open={abgleichDialogOpen}
+        onOpenChange={setAbgleichDialogOpen}
+        transaction={abgleichTransaction}
+        allTransactions={transactions}
+        onDecided={() => {
+          fetchTransactions()
+          fetchSummary()
+        }}
       />
 
       {/* PROJ-12: Bulk-Kategorisierung Dialog */}

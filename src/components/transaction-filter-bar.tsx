@@ -17,7 +17,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
-import { ChevronsUpDown, Search, Tags } from "lucide-react"
+import { ChevronsUpDown, Search, Tags, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Category } from "@/lib/types"
 
@@ -30,10 +30,15 @@ interface TransactionFilterBarProps {
   searchValue: string
   allCategories: Category[]
   selectedCategoryFilter: string[]
+  /** PROJ-16: Nur unbestätigte Abgleich-Einträge anzeigen. */
+  onlyUnconfirmed?: boolean
+  /** PROJ-16: Wird nur gerendert, wenn der Benutzer die Toggle sehen soll. */
+  showUnconfirmedToggle?: boolean
   onYearChange: (year: string) => void
   onMonthChange: (month: string) => void
   onSearchChange: (search: string) => void
   onCategoryFilterChange: (values: string[]) => void
+  onOnlyUnconfirmedChange?: (value: boolean) => void
 }
 
 const MONTHS = [
@@ -59,10 +64,13 @@ export function TransactionFilterBar({
   searchValue,
   allCategories,
   selectedCategoryFilter,
+  onlyUnconfirmed = false,
+  showUnconfirmedToggle = false,
   onYearChange,
   onMonthChange,
   onSearchChange,
   onCategoryFilterChange,
+  onOnlyUnconfirmedChange,
 }: TransactionFilterBarProps) {
   const [categoryPopoverOpen, setCategoryPopoverOpen] = useState(false)
 
@@ -199,6 +207,21 @@ export function TransactionFilterBar({
           aria-label="Buchungstext suchen"
         />
       </div>
+
+      {showUnconfirmedToggle && onOnlyUnconfirmedChange && (
+        <Button
+          type="button"
+          variant={onlyUnconfirmed ? "default" : "outline"}
+          size="sm"
+          onClick={() => onOnlyUnconfirmedChange(!onlyUnconfirmed)}
+          aria-pressed={onlyUnconfirmed}
+          aria-label="Nur unbestätigte Abgleich-Einträge anzeigen"
+          className="w-full sm:w-auto"
+        >
+          <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
+          Nur unbestätigte
+        </Button>
+      )}
 
       {selectedCategoryFilter.length > 0 && (
         <div className="hidden w-full flex-wrap gap-1 sm:flex">

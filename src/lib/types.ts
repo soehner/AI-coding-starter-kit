@@ -8,6 +8,8 @@ export interface UserProfile {
   // PROJ-10: Zusatzrollen für Genehmigungssystem (unabhängig von Hauptrolle)
   ist_vorstand?: boolean
   ist_zweiter_vorstand?: boolean
+  // PROJ-11: Im Antrag-Genehmiger-Pool für Kostenübernahme-Anträge eingetragen
+  is_antrag_genehmiger?: boolean
 }
 
 // PROJ-3: KI-Provider Typen
@@ -31,6 +33,12 @@ export interface ParsedTransaction {
    * zuverlässig bestimmen konnte.
    */
   counterpart?: string | null
+  /**
+   * PROJ-16: IBAN des Zahlungspartners (Gegenseite). Wird vom KI-Parser aus
+   * dem Verwendungszweck oder Buchungstext extrahiert. Fließt in den
+   * matching_hash und in das Fuzzy-Match zwischen PDF und PSD2 ein.
+   */
+  counterpart_iban?: string | null
   amount: number
   balance_after: number
   isDuplicate?: boolean
@@ -159,6 +167,50 @@ export interface Transaction {
   }
   // PROJ-12: vom GET /api/transactions und PATCH mitgeliefert
   categories: Category[]
+  // PROJ-16: Herkunfts- und Abgleichs-Felder
+  matching_hash?: string | null
+  quelle?: "psd2" | "pdf" | "beide"
+  status?: "nur_psd2" | "nur_pdf" | "bestaetigt" | "vorschlag" | "konflikt"
+  psd2_abgerufen_am?: string | null
+  psd2_original_data?: Record<string, unknown> | null
+  iban_gegenseite?: string | null
+  nicht_matchen_mit?: string[] | null
+}
+
+// PROJ-16: PSD2-Verbindung (seit Migration 024 via Enable Banking)
+export interface Psd2Verbindung {
+  id: string
+  enablebanking_session_id: string | null
+  enablebanking_account_id: string | null
+  enablebanking_authorization_id: string | null
+  enablebanking_aspsp_name: string
+  enablebanking_aspsp_country: string
+  consent_gueltig_bis: string | null
+  letzter_abruf_am: string | null
+  letzter_abruf_status: "erfolg" | "fehler" | null
+  letzter_abruf_fehler: string | null
+  aufeinanderfolgende_fehler: number
+  letzte_renewal_mail_am: string | null
+  state_token: string | null
+  state_token_erstellt_am: string | null
+  erstellt_am: string
+  erstellt_von: string
+}
+
+// PROJ-16: Status-Antwort für /api/admin/psd2/status
+export interface Psd2Status {
+  verbunden: boolean
+  bereit: boolean
+  /** Beibehaltener Feldname für das Frontend — enthält jetzt den ASPSP-Namen. */
+  institution_id?: string
+  aspsp_name?: string
+  aspsp_country?: string
+  consent_gueltig_bis?: string | null
+  tage_bis_ablauf?: number | null
+  letzter_abruf_am?: string | null
+  letzter_abruf_status?: "erfolg" | "fehler" | null
+  letzter_abruf_fehler?: string | null
+  aufeinanderfolgende_fehler?: number
 }
 
 // PROJ-7: Granulare Feature-Berechtigungen
@@ -185,38 +237,40 @@ export interface UserWithPermissions extends UserProfile {
   permissions: UserPermissions | null
 }
 
-// PROJ-11: Kostenübernahme-Antrag
-export type CostRequestStatus = "offen" | "genehmigt" | "abgelehnt"
-export type ApprovalRole = "vorsitzender_1" | "vorsitzender_2" | "kassier"
+// PROJ-11 (Neu): Kostenübernahme-Anträge aus öffentlichem Formular
+export type AntragStatus = "offen" | "genehmigt" | "abgelehnt"
+export type AntragEmailStatus = "ausstehend" | "gesendet" | "fehlgeschlagen"
 
-export interface CostRequest {
+export interface AntragDokument {
+  id: string
+  document_url: string
+  document_name: string
+  display_order: number
+}
+
+export interface AntragEntscheidung {
+  id: string
+  approver_user_id: string
+  approver_email: string
+  decision: "genehmigt" | "abgelehnt"
+  comment: string | null
+  decided_at: string
+}
+
+export interface Antrag {
   id: string
   applicant_first_name: string
   applicant_last_name: string
   applicant_email: string
   amount_cents: number
   purpose: string
-  status: CostRequestStatus
-  email_status: "ausstehend" | "gesendet" | "fehlgeschlagen"
+  status: AntragStatus
+  email_status: AntragEmailStatus
   decided_at: string | null
   created_at: string
-}
-
-export interface CostRequestVote {
-  approval_role: ApprovalRole
-  decision: "genehmigt" | "abgelehnt"
-  voted_at: string
-}
-
-export interface CostRequestWithVotes extends CostRequest {
-  cost_request_votes: CostRequestVote[]
-}
-
-export interface CostRequestApprover {
-  id: string
-  approval_role: ApprovalRole
-  user_id: string
-  label: string
+  updated_at: string
+  antrag_entscheidungen: AntragEntscheidung[]
+  antrag_dokumente: AntragDokument[]
 }
 
 // PROJ-10: Genehmigungssystem

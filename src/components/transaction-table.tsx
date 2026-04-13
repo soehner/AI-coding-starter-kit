@@ -44,6 +44,7 @@ import { InlineCategoryEdit } from "@/components/inline-category-edit"
 import { BelegUploadDialog } from "@/components/beleg-upload-dialog"
 import { EditTransactionDialog } from "@/components/edit-transaction-dialog"
 import { CategoryBadge } from "@/components/category-badge"
+import { TransactionQuelleBadge } from "@/components/transaction-quelle-badge"
 import { isValidSeafileLink } from "@/lib/seafile-link"
 import type {
   Transaction,
@@ -71,6 +72,8 @@ interface TransactionTableProps {
   onUpdateTransactionMulti?: (id: string, updates: TransactionUpdateFields) => Promise<void>
   onUpdateCategories?: (id: string, categoryIds: string[]) => Promise<void>
   onDocumentUploaded?: (transactionId: string, documentRef: string) => void
+  /** PROJ-16: Wird aufgerufen, wenn der Benutzer auf ein Status-Badge klickt. */
+  onAbgleichOpen?: (transaction: Transaction) => void
   allCategories?: Category[]
 }
 
@@ -119,6 +122,7 @@ function SkeletonRows({ showCheckbox }: { showCheckbox: boolean }) {
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-16" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell className="hidden xl:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
@@ -148,6 +152,7 @@ export function TransactionTable({
   onUpdateTransactionMulti,
   onUpdateCategories,
   onDocumentUploaded,
+  onAbgleichOpen,
   allCategories = [],
 }: TransactionTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -270,6 +275,7 @@ export function TransactionTable({
                 </TableHead>
                 <TableHead className="w-[120px] text-right">Ausgabe</TableHead>
                 <TableHead className="w-[120px] text-right">Saldo</TableHead>
+                <TableHead className="w-[110px]">Quelle</TableHead>
                 <TableHead className="w-[180px]">Kategorien</TableHead>
                 <TableHead className="hidden w-[180px] lg:table-cell">Bemerkung</TableHead>
                 <TableHead className="hidden w-[120px] xl:table-cell">Beleg</TableHead>
@@ -290,7 +296,7 @@ export function TransactionTable({
               ) : transactions.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={(showSelectionColumn ? 1 : 0) + (canEdit ? 10 : 9)}
+                    colSpan={(showSelectionColumn ? 1 : 0) + (canEdit ? 11 : 10)}
                     className="h-32 text-center text-muted-foreground"
                   >
                     Keine Buchungen gefunden. Passen Sie die Filter an oder importieren Sie Kontoauszüge.
@@ -353,6 +359,19 @@ export function TransactionTable({
                       {/* Saldo - schreibgeschützt */}
                       <TableCell className="whitespace-nowrap text-right text-sm font-medium">
                         {formatCurrency(Number(t.balance_after))}
+                      </TableCell>
+
+                      {/* PROJ-16: Herkunft/Abgleich-Status */}
+                      <TableCell className="whitespace-nowrap">
+                        <TransactionQuelleBadge
+                          transaction={t}
+                          onClick={
+                            onAbgleichOpen &&
+                            (t.status === "vorschlag" || t.status === "konflikt")
+                              ? () => onAbgleichOpen(t)
+                              : undefined
+                          }
+                        />
                       </TableCell>
 
                       {/* Kategorien - PROJ-12 (inline editierbar) */}

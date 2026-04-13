@@ -10,7 +10,11 @@ import { MfaAktivierungDialog } from "@/components/mfa-aktivierung-dialog"
 import { MfaDeaktivierungDialog } from "@/components/mfa-deaktivierung-dialog"
 import { KategorienVerwaltung } from "@/components/kategorien-verwaltung"
 import { KategorisierungsregelnListe } from "@/components/kategorisierungsregeln-liste"
+import { AntragGenehmigerVerwaltung } from "@/components/antrag-genehmiger-verwaltung"
+import { Psd2VerbindungsKarte } from "@/components/psd2-verbindungs-karte"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useRouter, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
 import {
   Card,
   CardContent,
@@ -26,6 +30,11 @@ import type { Factor } from "@supabase/supabase-js"
 
 export default function EinstellungenPage() {
   const { user, isLoading: authLoading, isAdmin, updatePassword } = useAuth()
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const requestedTab = searchParams.get("tab")
+  const psd2Param = searchParams.get("psd2")
+  const psd2Message = searchParams.get("msg")
   const [mfaFactor, setMfaFactor] = useState<Factor | null>(null)
   const [isMfaLoading, setIsMfaLoading] = useState(true)
   const [mfaError, setMfaError] = useState<string | null>(null)
@@ -62,6 +71,34 @@ export default function EinstellungenPage() {
     }
   }, [user, fetchMfaStatus])
 
+  // PROJ-16: Rückmeldung vom Enable-Banking-Callback auswerten und
+  // anschließend die Query-Parameter bereinigen, damit der Toast bei
+  // erneuter Navigation nicht wiederholt erscheint.
+  useEffect(() => {
+    if (!psd2Param) return
+
+    if (psd2Param === "success") {
+      toast.success(
+        "Bankzugang erfolgreich verbunden. Der automatische Abruf ist jetzt aktiv."
+      )
+    } else if (psd2Param === "error") {
+      toast.error(
+        psd2Message
+          ? `Bankzugang konnte nicht verbunden werden: ${psd2Message}`
+          : "Bankzugang konnte nicht verbunden werden."
+      )
+    }
+
+    // URL bereinigen, Tab auf "bankzugang" erzwingen
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("psd2")
+    params.delete("msg")
+    params.set("tab", "bankzugang")
+    router.replace(`/dashboard/einstellungen?${params.toString()}`, {
+      scroll: false,
+    })
+  }, [psd2Param, psd2Message, router, searchParams])
+
   if (authLoading) {
     return (
       <div className="container px-4 py-8 md:px-6">
@@ -75,7 +112,21 @@ export default function EinstellungenPage() {
     return null
   }
 
-  const defaultTab = isAdmin ? "integration" : "sicherheit"
+  const validTabs = new Set([
+    "integration",
+    "bankzugang",
+    "kategorien",
+    "regeln",
+    "antrag-genehmiger",
+    "sicherheit",
+    "passwort",
+  ])
+  const defaultTab =
+    requestedTab && validTabs.has(requestedTab)
+      ? requestedTab
+      : isAdmin
+        ? "integration"
+        : "sicherheit"
 
   return (
     <div className="container px-4 py-8 md:px-6">
@@ -92,9 +143,15 @@ export default function EinstellungenPage() {
             <TabsTrigger value="integration">Integration</TabsTrigger>
           )}
           {isAdmin && (
+            <TabsTrigger value="bankzugang">Bankzugang</TabsTrigger>
+          )}
+          {isAdmin && (
             <TabsTrigger value="kategorien">Kategorien</TabsTrigger>
           )}
           {isAdmin && <TabsTrigger value="regeln">Regeln</TabsTrigger>}
+          {isAdmin && (
+            <TabsTrigger value="antrag-genehmiger">Antrag-Genehmiger</TabsTrigger>
+          )}
           <TabsTrigger value="sicherheit">Sicherheit</TabsTrigger>
           <TabsTrigger value="passwort">Passwort</TabsTrigger>
         </TabsList>
@@ -107,6 +164,12 @@ export default function EinstellungenPage() {
         )}
 
         {isAdmin && (
+          <TabsContent value="bankzugang" className="pt-4">
+            <Psd2VerbindungsKarte />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
           <TabsContent value="kategorien" className="pt-4">
             <KategorienVerwaltung />
           </TabsContent>
@@ -115,6 +178,12 @@ export default function EinstellungenPage() {
         {isAdmin && (
           <TabsContent value="regeln" className="pt-4">
             <KategorisierungsregelnListe />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="antrag-genehmiger" className="pt-4">
+            <AntragGenehmigerVerwaltung />
           </TabsContent>
         )}
 
