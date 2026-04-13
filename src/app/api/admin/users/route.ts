@@ -41,19 +41,20 @@ export async function GET() {
     )
   }
 
-  // 3. Auth-Daten mit Profilen zusammenführen (inkl. MFA-Status)
-  const authMap = new Map(
-    authData.users.map((u) => [
-      u.id,
-      {
-        last_sign_in_at: u.last_sign_in_at,
-        mfa_enabled: (u.factors ?? []).some(
-          (f: { status: string; factor_type: string }) =>
-            f.factor_type === "totp" && f.status === "verified"
-        ),
-      },
-    ])
+  // 3. MFA-Faktoren parallel pro Benutzer laden
+  //    (listUsers liefert das factors-Feld nicht zuverlässig)
+  const mfaEntries = await Promise.all(
+    authData.users.map(async (u) => {
+      const { data: factorData } = await adminClient.auth.admin.mfa.listFactors({
+        userId: u.id,
+      })
+      const mfa_enabled = (factorData?.factors ?? []).some(
+        (f) => f.factor_type === "totp" && f.status === "verified"
+      )
+      return [u.id, { last_sign_in_at: u.last_sign_in_at, mfa_enabled }] as const
+    })
   )
+  const authMap = new Map(mfaEntries)
 
   const users = profiles.map((p) => {
     const authInfo = authMap.get(p.id)
