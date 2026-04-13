@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
+  BookOpen,
   CheckSquare,
   ClipboardList,
   FileUp,
@@ -187,6 +188,16 @@ export function AppHeader() {
                       <Settings className="mr-2 h-4 w-4" />
                       Einstellungen
                     </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a
+                      href="/handbuch"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <BookOpen className="mr-2 h-4 w-4" />
+                      Handbuch
+                    </a>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
