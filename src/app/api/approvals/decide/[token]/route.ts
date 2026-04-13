@@ -79,7 +79,36 @@ export async function GET(
   }
 
   if (dbToken.status === "verbraucht") {
-    // Bisherige Entscheidung mitschicken + BUG-4 Unterscheidung
+    // Prüfen, ob der Antrag insgesamt bereits final abgeschlossen ist
+    const { data: parentRequest } = await adminClient
+      .from("approval_requests")
+      .select("status, link_type")
+      .eq("id", dbToken.request_id)
+      .single()
+
+    if (parentRequest && parentRequest.status !== "offen") {
+      const { data: finalDecisions } = await adminClient
+        .from("approval_decisions")
+        .select("decision, approver_role, comment")
+        .eq("request_id", dbToken.request_id)
+
+      return NextResponse.json(
+        {
+          error: "Der Antrag wurde bereits abgeschlossen.",
+          alreadyFinalized: true,
+          finalStatus: parentRequest.status,
+          linkType: parentRequest.link_type,
+          decisions: (finalDecisions || []).map((d) => ({
+            role: d.approver_role,
+            decision: d.decision,
+            comment: d.comment,
+          })),
+        },
+        { status: 410 }
+      )
+    }
+
+    // Antrag noch offen → eine Person derselben Rolle hat entschieden (BUG-4)
     const { data: existing } = await adminClient
       .from("approval_decisions")
       .select("decision, approver_id")
@@ -89,7 +118,7 @@ export async function GET(
 
     const selfDecided = existing?.approver_id === dbToken.approver_id
     const roleLabel =
-      dbToken.approver_role === "vorstand" ? "Vorstand" : "2. Vorstand"
+      dbToken.approver_role === "vorstand" ? "1. Vorstand" : "2. Vorstand"
 
     return NextResponse.json(
       {
@@ -289,6 +318,35 @@ export async function POST(
   }
 
   if (dbToken.status !== "aktiv") {
+    // Prüfen, ob der Antrag insgesamt bereits final abgeschlossen ist
+    const { data: parentRequest } = await adminClient
+      .from("approval_requests")
+      .select("status, link_type")
+      .eq("id", dbToken.request_id)
+      .single()
+
+    if (parentRequest && parentRequest.status !== "offen") {
+      const { data: finalDecisions } = await adminClient
+        .from("approval_decisions")
+        .select("decision, approver_role, comment")
+        .eq("request_id", dbToken.request_id)
+
+      return NextResponse.json(
+        {
+          error: "Der Antrag wurde bereits abgeschlossen.",
+          alreadyFinalized: true,
+          finalStatus: parentRequest.status,
+          linkType: parentRequest.link_type,
+          decisions: (finalDecisions || []).map((d) => ({
+            role: d.approver_role,
+            decision: d.decision,
+            comment: d.comment,
+          })),
+        },
+        { status: 410 }
+      )
+    }
+
     const { data: existing } = await adminClient
       .from("approval_decisions")
       .select("decision, approver_id")
@@ -299,7 +357,7 @@ export async function POST(
     // BUG-4: Unterscheidung — habe ICH entschieden oder ein Kollege mit gleicher Rolle?
     const selfDecided = existing?.approver_id === dbToken.approver_id
     const roleLabel =
-      dbToken.approver_role === "vorstand" ? "Vorstand" : "2. Vorstand"
+      dbToken.approver_role === "vorstand" ? "1. Vorstand" : "2. Vorstand"
 
     return NextResponse.json(
       {
