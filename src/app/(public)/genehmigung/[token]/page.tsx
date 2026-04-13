@@ -5,7 +5,8 @@ import { useParams, useSearchParams } from "next/navigation"
 import { GenehmigungsEntscheidung } from "@/components/genehmigungs-entscheidung"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { AlertCircle, XCircle } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { AlertCircle, CheckCircle2, XCircle } from "lucide-react"
 
 interface ApprovalInfo {
   request_id: string
@@ -17,7 +18,27 @@ interface ApprovalInfo {
   created_by_email: string
 }
 
-type PageState = "loading" | "ready" | "expired" | "already_decided" | "error"
+interface FinalizedInfo {
+  finalStatus: "genehmigt" | "abgelehnt"
+  linkType: "und" | "oder"
+  decisions: Array<{
+    role: "vorstand" | "zweiter_vorstand"
+    decision: "genehmigt" | "abgelehnt"
+    comment: string | null
+  }>
+}
+
+type PageState =
+  | "loading"
+  | "ready"
+  | "expired"
+  | "already_decided"
+  | "already_finalized"
+  | "error"
+
+function roleLabel(role: string): string {
+  return role === "vorstand" ? "1. Vorstand" : "2. Vorstand"
+}
 
 export default function GenehmigungTokenPage() {
   const params = useParams()
@@ -34,6 +55,7 @@ export default function GenehmigungTokenPage() {
   const [state, setState] = useState<PageState>("loading")
   const [approvalInfo, setApprovalInfo] = useState<ApprovalInfo | null>(null)
   const [existingDecision, setExistingDecision] = useState<string | null>(null)
+  const [finalizedInfo, setFinalizedInfo] = useState<FinalizedInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -48,6 +70,15 @@ export default function GenehmigungTokenPage() {
             return
           }
           if (response.status === 410) {
+            if (data.alreadyFinalized) {
+              setFinalizedInfo({
+                finalStatus: data.finalStatus,
+                linkType: data.linkType,
+                decisions: data.decisions || [],
+              })
+              setState("already_finalized")
+              return
+            }
             setState("already_decided")
             setExistingDecision(data.decision || null)
             return
@@ -93,6 +124,59 @@ export default function GenehmigungTokenPage() {
               Dieser Genehmigungslink ist nicht mehr gültig.
               Der Antrag bleibt offen — bitte kontaktiere den Antragsteller.
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (state === "already_finalized" && finalizedInfo) {
+    const isApproved = finalizedInfo.finalStatus === "genehmigt"
+    const linkReason =
+      finalizedInfo.linkType === "oder"
+        ? "Bei ODER-Verknüpfung reicht die Entscheidung einer einzigen Rolle — weitere Stimmen sind danach nicht mehr möglich."
+        : "Bei UND-Verknüpfung wird der Antrag abgeschlossen, sobald eine Rolle ablehnt."
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="mx-auto max-w-lg">
+          <CardContent className="flex flex-col items-center py-12 text-center">
+            {isApproved ? (
+              <CheckCircle2 className="mb-4 h-12 w-12 text-green-600" />
+            ) : (
+              <XCircle className="mb-4 h-12 w-12 text-destructive" />
+            )}
+            <h2 className="text-xl font-semibold mb-2">
+              Antrag bereits abgeschlossen
+            </h2>
+            <p className="text-muted-foreground mb-4">
+              Der Antrag wurde{" "}
+              <Badge variant={isApproved ? "default" : "destructive"}>
+                {isApproved ? "genehmigt" : "abgelehnt"}
+              </Badge>
+              .
+            </p>
+            {finalizedInfo.decisions.length > 0 && (
+              <div className="w-full text-left space-y-2 rounded-md bg-muted p-3 mb-4">
+                {finalizedInfo.decisions.map((d, idx) => (
+                  <div key={idx} className="text-sm">
+                    <span className="font-medium">{roleLabel(d.role)}:</span>{" "}
+                    <Badge
+                      variant={
+                        d.decision === "genehmigt" ? "default" : "destructive"
+                      }
+                    >
+                      {d.decision}
+                    </Badge>
+                    {d.comment && (
+                      <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">
+                        {d.comment}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">{linkReason}</p>
           </CardContent>
         </Card>
       </div>

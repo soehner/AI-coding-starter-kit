@@ -51,7 +51,28 @@ interface GenehmigungsEntscheidungProps {
   preselectedDecision?: "genehmigt" | "abgelehnt" | null
 }
 
-type DecisionState = "pending" | "submitting" | "success" | "error" | "already_decided" | "expired"
+type DecisionState =
+  | "pending"
+  | "submitting"
+  | "success"
+  | "error"
+  | "already_decided"
+  | "already_finalized"
+  | "expired"
+
+interface FinalizedInfo {
+  finalStatus: "genehmigt" | "abgelehnt"
+  linkType: "und" | "oder"
+  decisions: Array<{
+    role: "vorstand" | "zweiter_vorstand"
+    decision: "genehmigt" | "abgelehnt"
+    comment: string | null
+  }>
+}
+
+function roleLabel(role: string): string {
+  return role === "vorstand" ? "1. Vorstand" : "2. Vorstand"
+}
 
 export function GenehmigungsEntscheidung({
   token,
@@ -61,6 +82,7 @@ export function GenehmigungsEntscheidung({
   const [state, setState] = useState<DecisionState>("pending")
   const [error, setError] = useState<string | null>(null)
   const [resultDecision, setResultDecision] = useState<string | null>(null)
+  const [finalizedInfo, setFinalizedInfo] = useState<FinalizedInfo | null>(null)
 
   const form = useForm<ApprovalDecisionInput>({
     resolver: zodResolver(approvalDecisionSchema),
@@ -85,6 +107,15 @@ export function GenehmigungsEntscheidung({
 
       if (!response.ok) {
         if (response.status === 410) {
+          if (data.alreadyFinalized) {
+            setFinalizedInfo({
+              finalStatus: data.finalStatus,
+              linkType: data.linkType,
+              decisions: data.decisions || [],
+            })
+            setState("already_finalized")
+            return
+          }
           setState("already_decided")
           setResultDecision(data.decision || null)
           return
@@ -120,6 +151,58 @@ export function GenehmigungsEntscheidung({
             </Badge>
             . Der Antragsteller wird per E-Mail benachrichtigt.
           </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Antrag wurde bereits final abgeschlossen (z.B. durch andere Rolle bei ODER)
+  if (state === "already_finalized" && finalizedInfo) {
+    const isApproved = finalizedInfo.finalStatus === "genehmigt"
+    const linkReason =
+      finalizedInfo.linkType === "oder"
+        ? "Bei ODER-Verknüpfung reicht die Entscheidung einer einzigen Rolle — weitere Stimmen sind danach nicht mehr möglich."
+        : "Bei UND-Verknüpfung wird der Antrag abgeschlossen, sobald eine Rolle ablehnt."
+    return (
+      <Card className="mx-auto max-w-lg">
+        <CardContent className="flex flex-col items-center py-12 text-center">
+          {isApproved ? (
+            <CheckCircle2 className="mb-4 h-12 w-12 text-green-600" />
+          ) : (
+            <XCircle className="mb-4 h-12 w-12 text-destructive" />
+          )}
+          <h2 className="text-xl font-semibold mb-2">
+            Antrag bereits abgeschlossen
+          </h2>
+          <p className="text-muted-foreground mb-4">
+            Der Antrag wurde{" "}
+            <Badge variant={isApproved ? "default" : "destructive"}>
+              {isApproved ? "genehmigt" : "abgelehnt"}
+            </Badge>
+            .
+          </p>
+          {finalizedInfo.decisions.length > 0 && (
+            <div className="w-full text-left space-y-2 rounded-md bg-muted p-3 mb-4">
+              {finalizedInfo.decisions.map((d, idx) => (
+                <div key={idx} className="text-sm">
+                  <span className="font-medium">{roleLabel(d.role)}:</span>{" "}
+                  <Badge
+                    variant={
+                      d.decision === "genehmigt" ? "default" : "destructive"
+                    }
+                  >
+                    {d.decision}
+                  </Badge>
+                  {d.comment && (
+                    <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap">
+                      {d.comment}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">{linkReason}</p>
         </CardContent>
       </Card>
     )

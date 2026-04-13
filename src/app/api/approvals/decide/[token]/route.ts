@@ -147,6 +147,7 @@ export async function GET(
       document_url,
       document_name,
       status,
+      link_type,
       created_at,
       creator:user_profiles!approval_requests_created_by_fkey ( email ),
       approval_documents (
@@ -168,8 +169,24 @@ export async function GET(
   }
 
   if (requestRow.status !== "offen") {
+    // Finalisierte Entscheidungen inkl. Rolle ermitteln
+    const { data: finalDecisions } = await adminClient
+      .from("approval_decisions")
+      .select("decision, approver_role, comment")
+      .eq("request_id", dbToken.request_id)
+
     return NextResponse.json(
-      { error: "Der Antrag ist nicht mehr offen." },
+      {
+        error: "Der Antrag wurde bereits abgeschlossen.",
+        alreadyFinalized: true,
+        finalStatus: requestRow.status,
+        linkType: requestRow.link_type,
+        decisions: (finalDecisions || []).map((d) => ({
+          role: d.approver_role,
+          decision: d.decision,
+          comment: d.comment,
+        })),
+      },
       { status: 410 }
     )
   }
@@ -338,8 +355,23 @@ export async function POST(
   }
 
   if (requestRow.status !== "offen") {
+    const { data: finalDecisions } = await adminClient
+      .from("approval_decisions")
+      .select("decision, approver_role, comment")
+      .eq("request_id", dbToken.request_id)
+
     return NextResponse.json(
-      { error: "Der Antrag ist nicht mehr offen." },
+      {
+        error: "Der Antrag wurde bereits abgeschlossen.",
+        alreadyFinalized: true,
+        finalStatus: requestRow.status,
+        linkType: requestRow.link_type,
+        decisions: (finalDecisions || []).map((d) => ({
+          role: d.approver_role,
+          decision: d.decision,
+          comment: d.comment,
+        })),
+      },
       { status: 410 }
     )
   }
