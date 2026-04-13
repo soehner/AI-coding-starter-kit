@@ -81,56 +81,24 @@ export async function GET(request: Request) {
 
     const { year, month, search } = validation.data
 
-    // 1. Verfügbare Jahre per SQL DISTINCT abfragen (BUG-5 Fix)
-    let availableYears: string[] = []
+    // 1. Verfügbare Jahre per SQL DISTINCT abfragen.
+    //    BUG-7 Fix: Auch für eingeschränkte Benutzer nutzen wir jetzt eine
+    //    RPC mit DISTINCT serverseitig statt 10.000 Zeilen zu laden.
+    const { data: yearsData, error: yearsError } = await supabase.rpc(
+      "get_available_years_for_categories",
+      { p_category_filter: categoryFilterParam }
+    )
 
-    if (categoryFilterParam === null) {
-      const { data: yearsData, error: yearsError } = await supabase
-        .rpc("get_available_years")
-
-      if (yearsError) {
-        return NextResponse.json(
-          { error: "Fehler beim Laden der Jahre: " + yearsError.message },
-          { status: 500 }
-        )
-      }
-
-      availableYears = (yearsData || []).map(
-        (row: { year: string }) => row.year
+    if (yearsError) {
+      return NextResponse.json(
+        { error: "Fehler beim Laden der Jahre: " + yearsError.message },
+        { status: 500 }
       )
-    } else {
-      // PROJ-14: Für eingeschränkte Benutzer nur Jahre aus sichtbaren Buchungen
-      const { data: visibleYearsRows, error: visibleYearsError } =
-        await supabase
-          .from("transactions")
-          .select("booking_date, transaction_categories!inner(category_id)")
-          .in(
-            "transaction_categories.category_id",
-            categoryFilterParam
-          )
-          .order("booking_date", { ascending: false })
-          .limit(10000)
-
-      if (visibleYearsError) {
-        return NextResponse.json(
-          {
-            error:
-              "Fehler beim Laden der Jahre: " + visibleYearsError.message,
-          },
-          { status: 500 }
-        )
-      }
-
-      const years = new Set<string>()
-      for (const row of (visibleYearsRows ?? []) as Array<{
-        booking_date: string
-      }>) {
-        if (row.booking_date) {
-          years.add(row.booking_date.substring(0, 4))
-        }
-      }
-      availableYears = Array.from(years).sort((a, b) => b.localeCompare(a))
     }
+
+    const availableYears = (yearsData || []).map(
+      (row: { year: string }) => row.year
+    )
 
     // 2. Gesamtsaldo (aktuellste Buchung) — PROJ-14: gefiltert via RPC
     const { data: balanceData, error: latestError } = await supabase.rpc(

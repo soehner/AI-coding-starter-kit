@@ -49,14 +49,18 @@ export async function getCategoryFilter(
     .eq("user_id", userId)
 
   if (error) {
-    // Fail-safe: Bei einem Fehler geben wir KEINEN uneingeschränkten Zugriff,
-    // sondern eine leere Menge — der Benutzer sieht dann nichts, statt
-    // versehentlich alles zu sehen.
+    // BUG-2: Bei einem DB-Fehler werfen wir die Exception, damit die
+    // aufrufende Route mit 500 antwortet. Vorher wurde fälschlich eine
+    // leere erlaubte Menge zurückgegeben — dadurch sahen uneingeschränkte
+    // Betrachter bei transienten DB-Fehlern plötzlich keine Buchungen,
+    // obwohl sie eigentlich uneingeschränkten Zugriff haben.
     console.error(
       "Fehler beim Laden des Kategorie-Zugriffs:",
       error.message
     )
-    return { restricted: true, allowedCategoryIds: [] }
+    throw new Error(
+      "Kategorie-Zugriff konnte nicht geladen werden: " + error.message
+    )
   }
 
   const ids = (data ?? []).map((row) => row.category_id as string)
@@ -96,11 +100,14 @@ export async function isTransactionVisible(
     .limit(1)
 
   if (error) {
+    // BUG-2: DB-Fehler durchreichen, statt fälschlich 404 zu signalisieren
     console.error(
       "Fehler bei der Sichtbarkeitsprüfung einer Buchung:",
       error.message
     )
-    return false
+    throw new Error(
+      "Sichtbarkeit der Buchung konnte nicht geprüft werden: " + error.message
+    )
   }
 
   return (data ?? []).length > 0

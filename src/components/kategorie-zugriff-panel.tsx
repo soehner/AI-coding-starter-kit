@@ -1,11 +1,10 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CategoryMultiSelect } from "@/components/category-multi-select"
 import { useCategories } from "@/hooks/use-categories"
@@ -16,26 +15,21 @@ import { Loader2, AlertCircle, Info, Check } from "lucide-react"
  * Betrachters. Wird im Aufklapp-Bereich der Benutzerverwaltung unterhalb
  * der Feature-Berechtigungen angezeigt.
  *
+ * UX: Sofort-Speichern — jede Änderung (Toggle oder Kategorie-Auswahl)
+ * wird direkt zur API geschickt. Damit bleibt das Verhalten konsistent
+ * mit dem UserPermissionsPanel (PROJ-7) im selben Aufklapp-Bereich
+ * (BUG-3 Fix).
+ *
  * Datenvertrag (Backend):
  *   GET  /api/admin/users/:id/category-access
  *        → { unrestricted: boolean, category_ids: string[], role: string }
  *   PUT  /api/admin/users/:id/category-access
  *        Body: { unrestricted: boolean, category_ids: string[] }
- *
- * Logik: "unrestricted = true"  → keine Einschränkung (alle Kategorien sichtbar,
- *                                 Standard bei leerem Eintrag in der Tabelle).
- *        "unrestricted = false" → nur die in `category_ids` aufgeführten
- *                                 Kategorien sind für den Betrachter sichtbar.
  */
 
 interface KategorieZugriffPanelProps {
   userId: string
   userEmail: string
-}
-
-interface CategoryAccessState {
-  restricted: boolean
-  categoryIds: string[]
 }
 
 export function KategorieZugriffPanel({
@@ -44,9 +38,6 @@ export function KategorieZugriffPanel({
 }: KategorieZugriffPanelProps) {
   const allCategories = useCategories()
 
-  const [initialState, setInitialState] = useState<CategoryAccessState | null>(
-    null
-  )
   const [restricted, setRestricted] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
 
@@ -55,6 +46,8 @@ export function KategorieZugriffPanel({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [justSaved, setJustSaved] = useState(false)
+
+  const justSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const loadAccess = useCallback(async () => {
     setIsLoading(true)
@@ -73,13 +66,10 @@ export function KategorieZugriffPanel({
         unrestricted?: boolean
         category_ids?: string[]
       }
-      const next: CategoryAccessState = {
-        restricted: data.unrestricted === false,
-        categoryIds: Array.isArray(data.category_ids) ? data.category_ids : [],
-      }
-      setInitialState(next)
-      setRestricted(next.restricted)
-      setSelectedIds(next.categoryIds)
+      setRestricted(data.unrestricted === false)
+      setSelectedIds(
+        Array.isArray(data.category_ids) ? data.category_ids : []
+      )
     } catch (err) {
       setLoadError(
         err instanceof Error
@@ -95,53 +85,74 @@ export function KategorieZugriffPanel({
     loadAccess()
   }, [loadAccess])
 
-  const isDirty =
-    !!initialState &&
-    (initialState.restricted !== restricted ||
-      initialState.categoryIds.length !== selectedIds.length ||
-      initialState.categoryIds.some((id) => !selectedIds.includes(id)))
-
-  // Validierung: "Eingeschränkt" mit leerer Liste ist erlaubt, bedeutet aber
-  // "keine Buchungen sichtbar". Wir warnen nur hinweisend.
-  const hasEmptyRestriction = restricted && selectedIds.length === 0
-
-  async function handleSave() {
-    setIsSaving(true)
-    setSaveError(null)
-    setJustSaved(false)
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/category-access`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          unrestricted: !restricted,
-          category_ids: restricted ? selectedIds : [],
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(
-          data.error || "Kategorie-Zugriff konnte nicht gespeichert werden."
-        )
+  useEffect(() => {
+    return () => {
+      if (justSavedTimer.current) {
+        clearTimeout(justSavedTimer.current)
       }
-      setInitialState({
-        restricted,
-        categoryIds: restricted ? [...selectedIds] : [],
-      })
-      setJustSaved(true)
-      // „Gespeichert"-Hinweis kurz anzeigen
-      setTimeout(() => setJustSaved(false), 2500)
-    } catch (err) {
-      setSaveError(
-        err instanceof Error
-          ? err.message
-          : "Kategorie-Zugriff konnte nicht gespeichert werden."
-      )
-    } finally {
-      setIsSaving(false)
+    }
+  }, [])
+
+  const save = useCallback(
+    async (nextRestricted: boolean, nextIds: string[]) => {
+      setIsSaving(true)
+      setSaveError(null)
+      setJustSaved(false)
+      try {
+        const res = await fetch(
+          `/api/admin/users/${userId}/category-access`,
+          {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              unrestricted: !nextRestricted,
+              category_ids: nextRestricted ? nextIds : [],
+            }),
+          }
+        )
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(
+            data.error || "Kategorie-Zugriff konnte nicht gespeichert werden."
+          )
+        }
+        setJustSaved(true)
+        if (justSavedTimer.current) clearTimeout(justSavedTimer.current)
+        justSavedTimer.current = setTimeout(() => setJustSaved(false), 2500)
+      } catch (err) {
+        setSaveError(
+          err instanceof Error
+            ? err.message
+            : "Kategorie-Zugriff konnte nicht gespeichert werden."
+        )
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [userId]
+  )
+
+  function handleToggle(checked: boolean) {
+    setRestricted(checked)
+    // Beim Einschalten mit leerer Auswahl kein Save — das wäre direkt
+    // „keine Buchungen sichtbar". Wir warten auf eine Kategorie-Auswahl.
+    if (checked && selectedIds.length === 0) {
+      setSaveError(null)
+      setJustSaved(false)
+      return
+    }
+    save(checked, selectedIds)
+  }
+
+  function handleCategoriesChange(next: string[]) {
+    setSelectedIds(next)
+    if (restricted) {
+      save(restricted, next)
     }
   }
+
+  const hasEmptyRestriction = restricted && selectedIds.length === 0
 
   return (
     <div className="space-y-4 px-4 py-3">
@@ -184,19 +195,35 @@ export function KategorieZugriffPanel({
                   : "Alle Kategorien sind sichtbar (Standard)."}
               </p>
             </div>
-            <Switch
-              id={`cat-access-toggle-${userId}`}
-              checked={restricted}
-              onCheckedChange={(checked) => {
-                setRestricted(checked)
-                setJustSaved(false)
-                setSaveError(null)
-              }}
-              disabled={isSaving}
-              aria-label={`Kategorie-Einschränkung für ${userEmail} ${
-                restricted ? "deaktivieren" : "aktivieren"
-              }`}
-            />
+            <div className="flex items-center gap-2">
+              {isSaving && (
+                <Loader2
+                  className="h-4 w-4 animate-spin text-muted-foreground"
+                  aria-hidden="true"
+                />
+              )}
+              {!isSaving && justSaved && (
+                <span
+                  className="flex items-center gap-1 text-xs text-muted-foreground"
+                  aria-live="polite"
+                >
+                  <Check
+                    className="h-3.5 w-3.5 text-green-600"
+                    aria-hidden="true"
+                  />
+                  Gespeichert
+                </span>
+              )}
+              <Switch
+                id={`cat-access-toggle-${userId}`}
+                checked={restricted}
+                onCheckedChange={handleToggle}
+                disabled={isSaving}
+                aria-label={`Kategorie-Einschränkung für ${userEmail} ${
+                  restricted ? "deaktivieren" : "aktivieren"
+                }`}
+              />
+            </div>
           </div>
 
           {restricted && (
@@ -207,11 +234,7 @@ export function KategorieZugriffPanel({
               <CategoryMultiSelect
                 allCategories={allCategories}
                 selectedIds={selectedIds}
-                onChange={(next) => {
-                  setSelectedIds(next)
-                  setJustSaved(false)
-                  setSaveError(null)
-                }}
+                onChange={handleCategoriesChange}
                 disabled={isSaving}
                 placeholder="Kategorien auswählen…"
               />
@@ -219,8 +242,9 @@ export function KategorieZugriffPanel({
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription className="text-xs">
-                    Ohne ausgewählte Kategorien sieht {userEmail} keine
-                    Buchungen.
+                    Wählen Sie mindestens eine Kategorie aus, sonst sieht{" "}
+                    {userEmail} keine Buchungen. Die Einschränkung wird erst
+                    aktiv, sobald eine Kategorie gewählt ist.
                   </AlertDescription>
                 </Alert>
               )}
@@ -233,29 +257,6 @@ export function KategorieZugriffPanel({
               <AlertDescription>{saveError}</AlertDescription>
             </Alert>
           )}
-
-          <div className="flex items-center justify-end gap-2">
-            {justSaved && !isDirty && (
-              <span
-                className="flex items-center gap-1 text-xs text-muted-foreground"
-                aria-live="polite"
-              >
-                <Check className="h-3.5 w-3.5 text-green-600" aria-hidden="true" />
-                Gespeichert
-              </span>
-            )}
-            <Button
-              type="button"
-              size="sm"
-              onClick={handleSave}
-              disabled={isSaving || !isDirty}
-            >
-              {isSaving && (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
-              )}
-              Speichern
-            </Button>
-          </div>
         </>
       )}
     </div>
