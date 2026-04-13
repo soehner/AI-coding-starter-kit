@@ -38,6 +38,7 @@ export default function AdminUsersPage() {
         permissions?: UserPermissions | null
         ist_vorstand?: boolean
         ist_zweiter_vorstand?: boolean
+        mfa_enabled?: boolean
       }>).map((u) => ({
         id: u.id,
         email: u.email,
@@ -47,6 +48,7 @@ export default function AdminUsersPage() {
         permissions: u.permissions ?? null,
         ist_vorstand: u.ist_vorstand ?? false,
         ist_zweiter_vorstand: u.ist_zweiter_vorstand ?? false,
+        mfa_enabled: u.mfa_enabled ?? false,
       }))
 
       setUsers(userEntries)
