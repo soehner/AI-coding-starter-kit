@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/admin-auth"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { inviteUserSchema } from "@/lib/validations/admin"
+import { sendInvitationEmail, getSiteUrl } from "@/lib/email-invite"
 
 export async function POST(request: Request) {
   // 1. Admin-Berechtigung prüfen (inkl. Rate-Limiting)
@@ -31,7 +32,18 @@ export async function POST(request: Request) {
   const { email, role, ist_vorstand, ist_zweiter_vorstand } = validation.data
   const normalizedEmail = email.toLowerCase().trim()
 
-  // 3. Prüfen ob E-Mail bereits existiert
+  // 3. E-Mail-Dienst-Konfiguration prüfen, bevor ein User angelegt wird
+  if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) {
+    return NextResponse.json(
+      {
+        error:
+          "E-Mail-Dienst ist nicht konfiguriert. Bitte RESEND_API_KEY und RESEND_FROM_EMAIL setzen.",
+      },
+      { status: 500 }
+    )
+  }
+
+  // 4. Prüfen ob E-Mail bereits existiert
   const adminClient = createAdminSupabaseClient()
 
   const { data: existingProfiles } = await adminClient
@@ -47,16 +59,23 @@ export async function POST(request: Request) {
     )
   }
 
-  // 4. Benutzer einladen via Supabase Admin API
-  const { data: inviteData, error: inviteError } =
-    await adminClient.auth.admin.inviteUserByEmail(normalizedEmail, {
-      data: { role },
+  // 5. Einladungs-Link via Supabase Admin API erzeugen (ohne Mail-Versand)
+  //    Wir verschicken die Mail selbst über Resend, damit externe Mail-Scanner
+  //    (Outlook SafeLinks, Mimecast) den One-Time-Token nicht vorab verbrauchen
+  //    und der User garantiert auf /invite/accept landet.
+  const { data: linkData, error: linkError } =
+    await adminClient.auth.admin.generateLink({
+      type: "invite",
+      email: normalizedEmail,
+      options: {
+        data: { role },
+      },
     })
 
-  if (inviteError) {
-    console.error("Einladungsfehler:", inviteError.message)
+  if (linkError || !linkData) {
+    console.error("Einladungsfehler:", linkError?.message)
 
-    if (inviteError.message.includes("already been registered")) {
+    if (linkError?.message.includes("already been registered")) {
       return NextResponse.json(
         { error: "Diese E-Mail-Adresse ist bereits registriert." },
         { status: 409 }
@@ -66,21 +85,52 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Einladung konnte nicht gesendet werden. Bitte versuchen Sie es später erneut.",
+          "Einladung konnte nicht erstellt werden. Bitte versuchen Sie es später erneut.",
       },
       { status: 500 }
     )
   }
 
-  // 5. Rolle im user_profiles setzen
-  // Der Trigger handle_new_user erstellt das Profil automatisch mit der Rolle
-  // aus raw_user_meta_data. Falls der Trigger die Rolle nicht korrekt setzt,
-  // aktualisieren wir hier explizit.
-  if (inviteData.user) {
+  // 6. Eigene Bestätigungs-URL bauen (zeigt auf unseren /auth/confirm-Handler)
+  const siteUrl = getSiteUrl()
+  const tokenHash = linkData.properties?.hashed_token
+  if (!tokenHash) {
+    return NextResponse.json(
+      { error: "Einladungs-Token konnte nicht erzeugt werden." },
+      { status: 500 }
+    )
+  }
+  const confirmUrl = `${siteUrl}/auth/confirm?token_hash=${encodeURIComponent(
+    tokenHash
+  )}&type=invite&next=${encodeURIComponent("/einladung-annehmen")}`
+
+  // 7. Einladungs-Mail über Resend verschicken
+  try {
+    await sendInvitationEmail(normalizedEmail, confirmUrl, role)
+  } catch (emailErr) {
+    console.error("Einladungs-E-Mail fehlgeschlagen:", emailErr)
+    // Mail fehlgeschlagen → angelegten User wieder aufräumen
+    if (linkData.user?.id) {
+      await adminClient.from("user_profiles").delete().eq("id", linkData.user.id)
+      await adminClient.auth.admin.deleteUser(linkData.user.id)
+    }
+    return NextResponse.json(
+      {
+        error:
+          emailErr instanceof Error
+            ? emailErr.message
+            : "E-Mail konnte nicht gesendet werden.",
+      },
+      { status: 500 }
+    )
+  }
+
+  // 8. Rolle im user_profiles setzen (Trigger hat bereits einen Eintrag angelegt)
+  if (linkData.user) {
     const { error: updateError } = await adminClient
       .from("user_profiles")
       .upsert({
-        id: inviteData.user.id,
+        id: linkData.user.id,
         email: normalizedEmail,
         role: role,
         ist_vorstand: ist_vorstand ?? false,
@@ -96,7 +146,7 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       message: "Einladung erfolgreich gesendet.",
-      userId: inviteData.user?.id,
+      userId: linkData.user?.id,
     },
     { status: 201 }
   )

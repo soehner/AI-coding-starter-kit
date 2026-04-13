@@ -6,7 +6,8 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const tokenHash = searchParams.get("token_hash")
   const type = searchParams.get("type") as EmailOtpType | null
-  const next = searchParams.get("next") ?? "/dashboard"
+  const defaultNext = type === "invite" ? "/einladung-annehmen" : "/dashboard"
+  const next = searchParams.get("next") ?? defaultNext
 
   if (!tokenHash || !type) {
     return NextResponse.redirect(

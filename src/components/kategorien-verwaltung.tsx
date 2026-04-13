@@ -281,7 +281,7 @@ export function KategorienVerwaltung() {
             <AlertDialogDescription>
               {deleteTarget && (
                 <>
-                  Die Kategorie <strong>„{deleteTarget.name}"</strong> wird gelöscht.
+                  Die Kategorie <strong>&bdquo;{deleteTarget.name}&ldquo;</strong> wird gelöscht.
                   {affectedCount > 0 ? (
                     <>
                       {" "}
