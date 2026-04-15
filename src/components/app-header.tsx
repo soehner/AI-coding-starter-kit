@@ -43,8 +43,16 @@ function getRoleLabel(role: string): string {
 }
 
 export function AppHeader() {
-  const { user, profile, isLoading, signOut, isAdmin, hasPermission } =
-    useAuth()
+  const {
+    user,
+    profile,
+    isLoading,
+    signOut,
+    isAdmin,
+    hasPermission,
+    canSeeGenehmigungen,
+    canSeeAntraege,
+  } = useAuth()
 
   const canImport = hasPermission("import_statements")
 
@@ -90,21 +98,21 @@ export function AppHeader() {
                     </Link>
                   </Button>
                 )}
-                {isAdmin && (
-                  <>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/admin/genehmigungen">
-                        <CheckSquare className="mr-2 h-4 w-4" />
-                        Genehmigungen
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href="/dashboard/admin/kostenuebernahmen">
-                        <ClipboardList className="mr-2 h-4 w-4" />
-                        Anträge auf Kostenübernahme
-                      </Link>
-                    </Button>
-                  </>
+                {canSeeGenehmigungen && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/dashboard/admin/genehmigungen">
+                      <CheckSquare className="mr-2 h-4 w-4" />
+                      Genehmigungen
+                    </Link>
+                  </Button>
+                )}
+                {canSeeAntraege && (
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href="/dashboard/admin/kostenuebernahmen">
+                      <ClipboardList className="mr-2 h-4 w-4" />
+                      Anträge auf Kostenübernahme
+                    </Link>
+                  </Button>
                 )}
               </nav>
 
@@ -160,20 +168,24 @@ export function AppHeader() {
                       </Link>
                     </DropdownMenuItem>
                   )}
+                  {canSeeGenehmigungen && (
+                    <DropdownMenuItem asChild className="md:hidden">
+                      <Link href="/dashboard/admin/genehmigungen">
+                        <CheckSquare className="mr-2 h-4 w-4" />
+                        Genehmigungen
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {canSeeAntraege && (
+                    <DropdownMenuItem asChild className="md:hidden">
+                      <Link href="/dashboard/admin/kostenuebernahmen">
+                        <ClipboardList className="mr-2 h-4 w-4" />
+                        Anträge auf Kostenübernahme
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {isAdmin && (
                     <>
-                      <DropdownMenuItem asChild className="md:hidden">
-                        <Link href="/dashboard/admin/genehmigungen">
-                          <CheckSquare className="mr-2 h-4 w-4" />
-                          Genehmigungen
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="md:hidden">
-                        <Link href="/dashboard/admin/kostenuebernahmen">
-                          <ClipboardList className="mr-2 h-4 w-4" />
-                          Anträge auf Kostenübernahme
-                        </Link>
-                      </DropdownMenuItem>
                       <DropdownMenuSeparator className="md:hidden" />
                       <DropdownMenuItem asChild>
                         <Link href="/dashboard/admin/users">

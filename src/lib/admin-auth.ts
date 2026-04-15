@@ -82,3 +82,79 @@ export async function requireAdmin(): Promise<
 
   return { profile: profile as UserProfile }
 }
+
+/**
+ * Erlaubt Zugriff für Administratoren ODER Benutzer, die im
+ * antrag_genehmiger-Pool eingetragen sind. Wird für Lese-Endpunkte rund um
+ * Kostenübernahme-Anträge verwendet.
+ */
+export async function requireAdminOrAntragGenehmiger(): Promise<
+  | { profile: UserProfile; isAdmin: boolean; error?: never }
+  | { profile?: never; isAdmin?: never; error: NextResponse }
+> {
+  const headersList = await headers()
+  const ip = headersList.get("x-forwarded-for")?.split(",")[0] ?? "unknown"
+
+  if (isRateLimited(ip)) {
+    return {
+      error: NextResponse.json(
+        { error: "Zu viele Anfragen. Bitte versuchen Sie es später erneut." },
+        { status: 429 }
+      ),
+    }
+  }
+
+  const supabase = await createServerSupabaseClient()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return {
+      error: NextResponse.json(
+        { error: "Nicht authentifiziert." },
+        { status: 401 }
+      ),
+    }
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from("user_profiles")
+    .select("id, email, role, created_at")
+    .eq("id", user.id)
+    .single()
+
+  if (profileError || !profile) {
+    return {
+      error: NextResponse.json(
+        { error: "Profil nicht gefunden." },
+        { status: 404 }
+      ),
+    }
+  }
+
+  const isAdmin = profile.role === "admin"
+
+  if (!isAdmin) {
+    const { data: poolEntry } = await supabase
+      .from("antrag_genehmiger")
+      .select("user_id")
+      .eq("user_id", profile.id)
+      .maybeSingle()
+
+    if (!poolEntry) {
+      return {
+        error: NextResponse.json(
+          {
+            error:
+              "Keine Berechtigung. Nur Administratoren oder Antrag-Genehmiger haben Zugriff.",
+          },
+          { status: 403 }
+        ),
+      }
+    }
+  }
+
+  return { profile: profile as UserProfile, isAdmin }
+}

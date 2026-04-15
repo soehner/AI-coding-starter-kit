@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod/v4"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Card,
@@ -23,7 +24,24 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Paperclip,
+  X,
+} from "lucide-react"
+
+const MAX_FILES = 5
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]
 
 const kostenuebernahmeSchema = z.object({
   firstName: z
@@ -53,10 +71,18 @@ const kostenuebernahmeSchema = z.object({
 
 type KostenuebernahmeFormValues = z.infer<typeof kostenuebernahmeSchema>
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function KostenuebernahmeFormular() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitted, setIsSubmitted] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const form = useForm<KostenuebernahmeFormValues>({
     resolver: zodResolver(kostenuebernahmeSchema),
@@ -69,23 +95,53 @@ export function KostenuebernahmeFormular() {
     },
   })
 
+  function handleFileSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? [])
+    const combined = [...files, ...selected]
+
+    if (combined.length > MAX_FILES) {
+      setError(`Maximal ${MAX_FILES} Anhänge erlaubt.`)
+      return
+    }
+    for (const f of selected) {
+      if (!ALLOWED_MIME_TYPES.includes(f.type)) {
+        setError(`"${f.name}" hat einen nicht erlaubten Dateityp. Erlaubt: PDF, JPG, PNG, HEIC, DOC, DOCX.`)
+        return
+      }
+      if (f.size > MAX_FILE_SIZE) {
+        setError(`"${f.name}" ist zu groß. Maximal 10 MB pro Datei.`)
+        return
+      }
+    }
+
+    setError(null)
+    setFiles(combined)
+    // Input zurücksetzen, damit dieselbe Datei erneut ausgewählt werden kann
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
   async function onSubmit(values: KostenuebernahmeFormValues) {
     setIsLoading(true)
     setError(null)
 
     try {
-      const amount = parseFloat(values.amount.replace(",", "."))
+      const formData = new FormData()
+      formData.append("firstName", values.firstName.trim())
+      formData.append("lastName", values.lastName.trim())
+      formData.append("email", values.email.trim())
+      formData.append("amount", values.amount.replace(",", "."))
+      formData.append("purpose", values.purpose.trim())
+      for (const f of files) {
+        formData.append("files", f)
+      }
 
-      const response = await fetch("/api/cost-requests", {
+      const response = await fetch("/api/antraege", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: values.firstName.trim(),
-          lastName: values.lastName.trim(),
-          email: values.email.trim().toLowerCase(),
-          amount,
-          purpose: values.purpose.trim(),
-        }),
+        body: formData,
       })
 
       const data = await response.json()
@@ -114,7 +170,6 @@ export function KostenuebernahmeFormular() {
     }
   }
 
-  // Erfolgsmeldung nach dem Absenden
   if (isSubmitted) {
     return (
       <Card className="w-full max-w-lg">
@@ -143,6 +198,7 @@ export function KostenuebernahmeFormular() {
               variant="outline"
               onClick={() => {
                 setIsSubmitted(false)
+                setFiles([])
                 form.reset()
               }}
               className="mt-2"
@@ -162,7 +218,7 @@ export function KostenuebernahmeFormular() {
           Kostenübernahme-Antrag
         </CardTitle>
         <CardDescription>
-          CBS-Mannheim Förderverein e.V. - Stellen Sie hier Ihren Antrag auf
+          CBS-Mannheim Förderverein e.V. – Stellen Sie hier Ihren Antrag auf
           Kostenübernahme.
         </CardDescription>
       </CardHeader>
@@ -278,6 +334,63 @@ export function KostenuebernahmeFormular() {
                 </FormItem>
               )}
             />
+
+            <div className="space-y-2">
+              <Label>Anhänge (optional)</Label>
+              <p className="text-xs text-muted-foreground">
+                Bis zu {MAX_FILES} Dateien (PDF, JPG, PNG, HEIC, DOC, DOCX), je
+                max. 10 MB.
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.heic,.doc,.docx,application/pdf,image/jpeg,image/png,image/heic,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={handleFileSelect}
+                disabled={isLoading || files.length >= MAX_FILES}
+                className="hidden"
+                id="antrag-file-input"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading || files.length >= MAX_FILES}
+                className="w-full"
+              >
+                <Paperclip className="mr-2 h-4 w-4" />
+                Dateien auswählen
+                {files.length > 0 && ` (${files.length}/${MAX_FILES})`}
+              </Button>
+
+              {files.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {files.map((f, index) => (
+                    <li
+                      key={`${f.name}-${index}`}
+                      className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-1.5 text-xs"
+                    >
+                      <span className="truncate" title={f.name}>
+                        {f.name}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {formatFileSize(f.size)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeFile(index)}
+                        disabled={isLoading}
+                        aria-label={`Anhang ${f.name} entfernen`}
+                        className="shrink-0 text-muted-foreground hover:text-destructive disabled:opacity-50"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? (

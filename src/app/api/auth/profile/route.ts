@@ -46,7 +46,7 @@ export async function GET() {
 
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
-    .select("id, email, role, created_at, user_permissions(edit_transactions, export_excel, import_statements)")
+    .select("id, email, role, created_at, ist_vorstand, ist_zweiter_vorstand, user_permissions(edit_transactions, export_excel, import_statements)")
     .eq("id", user.id)
     .single()
 
@@ -56,6 +56,13 @@ export async function GET() {
       { status: 404 }
     )
   }
+
+  // Prüfen, ob der Benutzer als Antrag-Genehmiger eingetragen ist
+  const { data: genehmigerRow } = await supabase
+    .from("antrag_genehmiger")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle()
 
   // Berechtigungen flach mappen: Admins haben implizit alles
   const isAdmin = profile.role === "admin"
@@ -68,6 +75,9 @@ export async function GET() {
     email: profile.email,
     role: profile.role,
     created_at: profile.created_at,
+    ist_vorstand: profile.ist_vorstand === true,
+    ist_zweiter_vorstand: profile.ist_zweiter_vorstand === true,
+    is_antrag_genehmiger: genehmigerRow !== null,
     permissions: {
       edit_transactions: isAdmin || perms?.edit_transactions === true,
       export_excel: isAdmin || perms?.export_excel === true,

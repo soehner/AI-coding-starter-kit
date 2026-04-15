@@ -5,23 +5,27 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import { KostenuebernahmenTabelle } from "@/components/kostenuebernahmen-tabelle"
 import { Skeleton } from "@/components/ui/skeleton"
-import { toast } from "sonner"
-import type { CostRequestWithVotes } from "@/lib/types"
+import type { Antrag } from "@/lib/types"
 
 export default function AdminKostenuebernahmenPage() {
-  const { profile, isLoading: authLoading, isAdmin } = useAuth()
+  const {
+    profile,
+    isLoading: authLoading,
+    isAdmin,
+    canSeeAntraege,
+  } = useAuth()
   const router = useRouter()
 
-  const [requests, setRequests] = useState<CostRequestWithVotes[]>([])
-  const [isLoadingRequests, setIsLoadingRequests] = useState(true)
+  const [antraege, setAntraege] = useState<Antrag[]>([])
+  const [isLoadingAntraege, setIsLoadingAntraege] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchRequests = useCallback(async () => {
-    setIsLoadingRequests(true)
+  const fetchAntraege = useCallback(async () => {
+    setIsLoadingAntraege(true)
     setError(null)
 
     try {
-      const response = await fetch("/api/cost-requests")
+      const response = await fetch("/api/antraege")
       const data = await response.json()
 
       if (!response.ok) {
@@ -29,57 +33,26 @@ export default function AdminKostenuebernahmenPage() {
         return
       }
 
-      setRequests(data)
+      setAntraege(data)
     } catch {
       setError("Netzwerkfehler beim Laden der Anträge.")
     } finally {
-      setIsLoadingRequests(false)
+      setIsLoadingAntraege(false)
     }
   }, [])
 
-  // Redirect falls kein Admin
   useEffect(() => {
-    if (!authLoading && (!profile || !isAdmin)) {
+    if (!authLoading && (!profile || !canSeeAntraege)) {
       router.replace("/dashboard")
     }
-  }, [authLoading, profile, isAdmin, router])
+  }, [authLoading, profile, canSeeAntraege, router])
 
-  // Anträge laden
   useEffect(() => {
-    if (isAdmin) {
-      fetchRequests()
+    if (canSeeAntraege) {
+      fetchAntraege()
     }
-  }, [isAdmin, fetchRequests])
+  }, [canSeeAntraege, fetchAntraege])
 
-  // E-Mail erneut senden
-  async function handleRetryEmail(requestId: string) {
-    try {
-      const response = await fetch(
-        `/api/cost-requests/${requestId}/retry-email`,
-        { method: "POST" }
-      )
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        toast.error(data.error || "E-Mail konnte nicht erneut gesendet werden.")
-        return
-      }
-
-      toast.success("E-Mails werden erneut gesendet.")
-
-      // Liste aktualisieren
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === requestId ? { ...r, email_status: "gesendet" as const } : r
-        )
-      )
-    } catch {
-      toast.error("Netzwerkfehler beim erneuten Senden der E-Mails.")
-    }
-  }
-
-  // Lade-Zustand während Auth noch läuft
   if (authLoading) {
     return (
       <div className="container px-4 py-8 md:px-6">
@@ -89,8 +62,7 @@ export default function AdminKostenuebernahmenPage() {
     )
   }
 
-  // Nicht-Admin: nichts anzeigen (Redirect passiert im useEffect)
-  if (!isAdmin) {
+  if (!canSeeAntraege) {
     return null
   }
 
@@ -107,10 +79,11 @@ export default function AdminKostenuebernahmenPage() {
       </div>
 
       <KostenuebernahmenTabelle
-        requests={requests}
-        isLoading={isLoadingRequests}
+        antraege={antraege}
+        isLoading={isLoadingAntraege}
         error={error}
-        onRetryEmail={handleRetryEmail}
+        canEdit={isAdmin}
+        onAntraegeChanged={fetchAntraege}
       />
     </div>
   )

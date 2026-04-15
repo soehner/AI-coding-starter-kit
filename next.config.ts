@@ -48,29 +48,9 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        source: "/abstimmung/:path*",
-        headers: [
-          ...defaultSecurityHeaders,
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob:",
-              "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
-              `frame-ancestors ${frameAncestors}`,
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
-        ],
-      },
       // Alle anderen Seiten: iFrame-Einbettung blockiert
       {
-        source: "/((?!antrag|abstimmung).*)",
+        source: "/((?!antrag/).*)",
         headers: [
           ...defaultSecurityHeaders,
           { key: "X-Frame-Options", value: "DENY" },

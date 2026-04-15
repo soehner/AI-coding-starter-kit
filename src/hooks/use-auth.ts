@@ -37,6 +37,9 @@ export function useAuth() {
           email: data.email,
           role: data.role,
           created_at: data.created_at,
+          ist_vorstand: data.ist_vorstand === true,
+          ist_zweiter_vorstand: data.ist_zweiter_vorstand === true,
+          is_antrag_genehmiger: data.is_antrag_genehmiger === true,
         }
         const permissions: UserPermissions = {
           user_id: data.id,
@@ -134,12 +137,21 @@ export function useAuth() {
     [state.profile?.role, state.permissions]
   )
 
+  const isAdmin = state.profile?.role === "admin"
+  const istVorstand =
+    state.profile?.ist_vorstand === true ||
+    state.profile?.ist_zweiter_vorstand === true
+  const istAntragGenehmiger = state.profile?.is_antrag_genehmiger === true
+
   return {
     ...state,
     signOut,
     updatePassword,
-    isAdmin: state.profile?.role === "admin",
+    isAdmin,
     isViewer: state.profile?.role === "viewer",
     hasPermission,
+    // Sichtbarkeit der erweiterten Bereiche
+    canSeeGenehmigungen: isAdmin || istVorstand,
+    canSeeAntraege: isAdmin || istAntragGenehmiger,
   }
 }
