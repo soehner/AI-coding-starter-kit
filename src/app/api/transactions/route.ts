@@ -47,6 +47,17 @@ const transactionsQuerySchema = z.object({
     .string()
     .max(2000, "Kategorie-Filter ist zu lang.")
     .optional(),
+  /**
+   * PROJ-16: Filter nach Herkunfts-/Abgleich-Status. Wenn "unconfirmed"
+   * gesetzt ist, werden nur Buchungen mit Status ungleich "bestaetigt"
+   * und "nur_pdf" zurückgegeben (also Vorschläge, Konflikte und reine
+   * PSD2-Einträge). Zusätzlich kann direkt ein einzelner Status gesetzt
+   * werden.
+   */
+  only_unconfirmed: z.enum(["true", "false"]).optional(),
+  status: z
+    .enum(["nur_psd2", "nur_pdf", "bestaetigt", "vorschlag", "konflikt"])
+    .optional(),
 })
 
 export async function GET(request: Request) {
@@ -90,6 +101,8 @@ export async function GET(request: Request) {
       sort: searchParams.get("sort") || undefined,
       dir: searchParams.get("dir") || undefined,
       categories: searchParams.get("categories") || undefined,
+      only_unconfirmed: searchParams.get("only_unconfirmed") || undefined,
+      status: searchParams.get("status") || undefined,
     }
 
     const validation = transactionsQuerySchema.safeParse(rawParams)
@@ -299,7 +312,15 @@ export async function GET(request: Request) {
         updated_at,
         updated_by,
         statement_id,
-        bank_statements!inner(statement_number, file_name, file_path),
+        matching_hash,
+        quelle,
+        status,
+        psd2_abgerufen_am,
+        psd2_original_data,
+        iban_gegenseite,
+        nicht_matchen_mit,
+        bank_statements(statement_number, file_name, file_path),
+        transaction_documents(id, document_url, document_name, display_order, created_at),
         ${categoryJoinSelect}
       `,
         { count: "exact" }
@@ -330,6 +351,15 @@ export async function GET(request: Request) {
       query = query.ilike("description", `%${search}%`)
     }
 
+    // PROJ-16: Filter nach Abgleich-Status
+    if (validation.data.status) {
+      query = query.eq("status", validation.data.status)
+    } else if (validation.data.only_unconfirmed === "true") {
+      // "Nur unbestätigte" blendet vollständig bestätigte und reine
+      // PDF-Einträge aus. Sichtbar bleiben: nur_psd2, vorschlag, konflikt.
+      query = query.in("status", ["nur_psd2", "vorschlag", "konflikt"])
+    }
+
     if (allowedTxIds !== null) {
       query = query.in("id", allowedTxIds)
     }
@@ -357,7 +387,7 @@ export async function GET(request: Request) {
       )
     }
 
-    // Categories flach in die Transaktion übernehmen
+    // Categories & Belege flach in die Transaktion übernehmen
     type RawRow = {
       id: string
       transaction_categories?: Array<{
@@ -368,12 +398,19 @@ export async function GET(request: Request) {
           created_at: string
         } | null
       }> | null
+      transaction_documents?: Array<{
+        id: string
+        document_url: string
+        document_name: string
+        display_order: number
+        created_at: string
+      }> | null
     } & Record<string, unknown>
 
     const rows = (data || []) as unknown as RawRow[]
 
     const transformed = rows.map((row) => {
-      const { transaction_categories, ...rest } = row
+      const { transaction_categories, transaction_documents, ...rest } = row
       const categories = (transaction_categories ?? [])
         .map((tc) => tc.category)
         .filter(
@@ -384,7 +421,10 @@ export async function GET(request: Request) {
             created_at: string
           } => c !== null
         )
-      return { ...rest, categories }
+      const documents = [...(transaction_documents ?? [])].sort(
+        (a, b) => a.display_order - b.display_order
+      )
+      return { ...rest, categories, documents }
     })
 
     return NextResponse.json({

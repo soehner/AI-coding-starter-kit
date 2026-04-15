@@ -48,6 +48,7 @@ import { TransactionQuelleBadge } from "@/components/transaction-quelle-badge"
 import { isValidSeafileLink } from "@/lib/seafile-link"
 import type {
   Transaction,
+  TransactionDocument,
   Category,
   EditableTransactionField,
   TransactionUpdateFields,
@@ -71,7 +72,7 @@ interface TransactionTableProps {
   onUpdateTransaction?: (id: string, field: EditableTransactionField, value: string) => Promise<void>
   onUpdateTransactionMulti?: (id: string, updates: TransactionUpdateFields) => Promise<void>
   onUpdateCategories?: (id: string, categoryIds: string[]) => Promise<void>
-  onDocumentUploaded?: (transactionId: string, documentRef: string) => void
+  onDocumentsChanged?: (transactionId: string, documents: TransactionDocument[]) => void
   /** PROJ-16: Wird aufgerufen, wenn der Benutzer auf ein Status-Badge klickt. */
   onAbgleichOpen?: (transaction: Transaction) => void
   allCategories?: Category[]
@@ -151,7 +152,7 @@ export function TransactionTable({
   onUpdateTransaction,
   onUpdateTransactionMulti,
   onUpdateCategories,
-  onDocumentUploaded,
+  onDocumentsChanged,
   onAbgleichOpen,
   allCategories = [],
 }: TransactionTableProps) {
@@ -191,13 +192,16 @@ export function TransactionTable({
     [onUpdateTransactionMulti]
   )
 
-  const handleUploadComplete = useCallback(
-    (documentRef: string) => {
-      if (uploadTransaction && onDocumentUploaded) {
-        onDocumentUploaded(uploadTransaction.id, documentRef)
+  const handleDocumentsChanged = useCallback(
+    (documents: TransactionDocument[]) => {
+      if (uploadTransaction && onDocumentsChanged) {
+        onDocumentsChanged(uploadTransaction.id, documents)
+        setUploadTransaction((prev) =>
+          prev ? { ...prev, documents } : prev
+        )
       }
     },
-    [uploadTransaction, onDocumentUploaded]
+    [uploadTransaction, onDocumentsChanged]
   )
 
   if (error) {
@@ -408,82 +412,143 @@ export function TransactionTable({
                         />
                       </TableCell>
 
-                      {/* Beleg - Upload/Anschauen */}
-                      <TableCell className="hidden max-w-[120px] xl:table-cell">
+                      {/* Beleg - Upload/Anschauen (max. 5 Belege pro Buchung) */}
+                      <TableCell className="hidden max-w-[140px] xl:table-cell">
                         <TooltipProvider>
                           <div className="flex items-center gap-1">
-                            {isValidSeafileLink(t.document_ref) ? (
-                              <>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <a
-                                      href={t.document_ref}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      aria-label="Beleg anschauen"
-                                      className="inline-flex"
-                                    >
-                                      <Badge
-                                        variant="secondary"
-                                        className="cursor-pointer gap-1 hover:bg-secondary/80"
-                                      >
-                                        <Paperclip className="h-3 w-3" />
-                                        Beleg
-                                        <ExternalLink className="h-3 w-3" />
-                                      </Badge>
-                                    </a>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Beleg in Seafile öffnen</TooltipContent>
-                                </Tooltip>
-                                {canEdit && seafileConfigured && (
+                            {(() => {
+                              const docs = t.documents ?? []
+                              const hasDocs = docs.length > 0
+                              const singleDocLink =
+                                docs.length === 1 ? docs[0].document_url : null
+
+                              if (hasDocs) {
+                                return (
+                                  <>
+                                    {singleDocLink ? (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <a
+                                            href={singleDocLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            aria-label="Beleg anschauen"
+                                            className="inline-flex"
+                                          >
+                                            <Badge
+                                              variant="secondary"
+                                              className="cursor-pointer gap-1 hover:bg-secondary/80"
+                                            >
+                                              <Paperclip className="h-3 w-3" />
+                                              Beleg
+                                              <ExternalLink className="h-3 w-3" />
+                                            </Badge>
+                                          </a>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          {docs[0].document_name}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    ) : (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Badge
+                                            variant="secondary"
+                                            className="cursor-pointer gap-1 hover:bg-secondary/80"
+                                            onClick={() =>
+                                              handleOpenUploadDialog(t)
+                                            }
+                                            role="button"
+                                            aria-label={`${docs.length} Belege anzeigen`}
+                                          >
+                                            <Paperclip className="h-3 w-3" />
+                                            {docs.length} Belege
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <ul className="max-w-xs space-y-0.5">
+                                            {docs.map((d) => (
+                                              <li
+                                                key={d.id}
+                                                className="truncate"
+                                              >
+                                                {d.document_name}
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                    {canEdit && seafileConfigured && (
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-6 w-6"
+                                            onClick={() =>
+                                              handleOpenUploadDialog(t)
+                                            }
+                                            aria-label="Belege verwalten"
+                                          >
+                                            <Upload className="h-3 w-3" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Belege verwalten
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    )}
+                                  </>
+                                )
+                              }
+
+                              if (canEdit && seafileConfigured) {
+                                return (
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button
                                         variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() => handleOpenUploadDialog(t)}
-                                        aria-label="Beleg ersetzen"
+                                        size="sm"
+                                        className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+                                        onClick={() =>
+                                          handleOpenUploadDialog(t)
+                                        }
+                                        aria-label="Belege hochladen"
                                       >
                                         <Upload className="h-3 w-3" />
+                                        Hochladen
                                       </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Beleg ersetzen</TooltipContent>
+                                    <TooltipContent>
+                                      Belege zu Seafile hochladen
+                                    </TooltipContent>
                                   </Tooltip>
-                                )}
-                              </>
-                            ) : canEdit && seafileConfigured ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
-                                    onClick={() => handleOpenUploadDialog(t)}
-                                    aria-label="Beleg hochladen"
-                                  >
-                                    <Upload className="h-3 w-3" />
-                                    Hochladen
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Beleg zu Seafile hochladen</TooltipContent>
-                              </Tooltip>
-                            ) : !seafileConfigured && canEdit ? (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-xs text-muted-foreground">
-                                    —
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Bitte Seafile in den Einstellungen konfigurieren
-                                </TooltipContent>
-                              </Tooltip>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                —
-                              </span>
-                            )}
+                                )
+                              }
+
+                              if (!seafileConfigured && canEdit) {
+                                return (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="text-xs text-muted-foreground">
+                                        —
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      Bitte Seafile in den Einstellungen
+                                      konfigurieren
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )
+                              }
+
+                              return (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              )
+                            })()}
                           </div>
                         </TooltipProvider>
                       </TableCell>
@@ -637,8 +702,8 @@ export function TransactionTable({
           onOpenChange={setUploadDialogOpen}
           transactionId={uploadTransaction.id}
           transactionDescription={uploadTransaction.description}
-          hasExistingDocument={!!uploadTransaction.document_ref}
-          onUploadComplete={handleUploadComplete}
+          existingDocuments={uploadTransaction.documents ?? []}
+          onDocumentsChanged={handleDocumentsChanged}
         />
       )}
 

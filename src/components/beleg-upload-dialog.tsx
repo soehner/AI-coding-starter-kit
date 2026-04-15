@@ -9,16 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
@@ -29,19 +19,29 @@ import {
   Upload,
   CheckCircle2,
   X,
+  ExternalLink,
+  Trash2,
 } from "lucide-react"
+import type { TransactionDocument } from "@/lib/types"
 
 type UploadStep = "idle" | "uploading" | "done" | "error"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const MAX_FILES_PER_TRANSACTION = 5
 
 interface BelegUploadDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   transactionId: string
   transactionDescription: string
-  hasExistingDocument: boolean
-  onUploadComplete: (documentRef: string) => void
+  existingDocuments: TransactionDocument[]
+  onDocumentsChanged: (documents: TransactionDocument[]) => void
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function BelegUploadDialog({
@@ -49,21 +49,24 @@ export function BelegUploadDialog({
   onOpenChange,
   transactionId,
   transactionDescription,
-  hasExistingDocument,
-  onUploadComplete,
+  existingDocuments,
+  onDocumentsChanged,
 }: BelegUploadDialogProps) {
   const [step, setStep] = useState<UploadStep>("idle")
   const [error, setError] = useState<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const existingCount = existingDocuments.length
+  const remainingSlots = Math.max(0, MAX_FILES_PER_TRANSACTION - existingCount)
 
   const resetState = useCallback(() => {
     setStep("idle")
     setError(null)
-    setSelectedFile(null)
+    setSelectedFiles([])
     setUploadProgress(0)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -75,81 +78,93 @@ export function BelegUploadDialog({
     onOpenChange(false)
   }, [resetState, onOpenChange])
 
-  const validateFile = useCallback((file: File): string | null => {
-    if (file.size > MAX_FILE_SIZE) {
-      return "Datei zu groß. Maximal 10 MB erlaubt."
-    }
-    return null
-  }, [])
+  const validateAndAddFiles = useCallback(
+    (incoming: File[]) => {
+      const combined = [...selectedFiles, ...incoming]
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      setError(null)
-      setStep("uploading")
-      setUploadProgress(10)
-
-      try {
-        const formData = new FormData()
-        formData.append("file", file)
-
-        setUploadProgress(30)
-
-        const response = await fetch(
-          `/api/transactions/${transactionId}/document`,
-          {
-            method: "POST",
-            body: formData,
-          }
+      if (combined.length > remainingSlots) {
+        setError(
+          `Es sind bereits ${existingCount} Belege vorhanden. Es können noch maximal ${remainingSlots} hochgeladen werden.`
         )
-
-        setUploadProgress(80)
-
-        const data = await response.json()
-
-        if (!response.ok) {
-          setStep("error")
-          setError(data.error || "Fehler beim Hochladen des Belegs.")
-          return
-        }
-
-        setUploadProgress(100)
-        setStep("done")
-        onUploadComplete(data.document_ref)
-
-        // Dialog nach kurzer Verzögerung schließen
-        setTimeout(() => {
-          handleClose()
-        }, 1500)
-      } catch {
-        setStep("error")
-        setError("Netzwerkfehler beim Hochladen. Bitte erneut versuchen.")
-      }
-    },
-    [transactionId, onUploadComplete, handleClose]
-  )
-
-  const handleFileSelect = useCallback(
-    (file: File) => {
-      const validationError = validateFile(file)
-      if (validationError) {
-        setError(validationError)
         setStep("error")
         return
       }
-      setSelectedFile(file)
+
+      for (const f of combined) {
+        if (f.size > MAX_FILE_SIZE) {
+          setError(`Die Datei "${f.name}" ist zu groß (maximal 10 MB).`)
+          setStep("error")
+          return
+        }
+      }
+
+      setSelectedFiles(combined)
       setError(null)
       setStep("idle")
+      if (fileInputRef.current) fileInputRef.current.value = ""
     },
-    [validateFile]
+    [selectedFiles, remainingSlots, existingCount]
   )
+
+  const uploadFiles = useCallback(async () => {
+    if (selectedFiles.length === 0) return
+
+    setError(null)
+    setStep("uploading")
+    setUploadProgress(10)
+
+    try {
+      const formData = new FormData()
+      for (const f of selectedFiles) {
+        formData.append("files", f)
+      }
+
+      setUploadProgress(30)
+
+      const response = await fetch(
+        `/api/transactions/${transactionId}/documents`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      )
+
+      setUploadProgress(80)
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setStep("error")
+        setError(data.error || "Fehler beim Hochladen der Belege.")
+        return
+      }
+
+      setUploadProgress(100)
+      setStep("done")
+
+      const newDocs: TransactionDocument[] = data.documents ?? []
+      onDocumentsChanged([...existingDocuments, ...newDocs])
+
+      setTimeout(() => {
+        handleClose()
+      }, 1200)
+    } catch {
+      setStep("error")
+      setError("Netzwerkfehler beim Hochladen. Bitte erneut versuchen.")
+    }
+  }, [
+    selectedFiles,
+    transactionId,
+    existingDocuments,
+    onDocumentsChanged,
+    handleClose,
+  ])
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault()
     setIsDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) {
-      handleFileSelect(file)
-    }
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) validateAndAddFiles(files)
   }
 
   function handleDragOver(e: React.DragEvent<HTMLDivElement>) {
@@ -163,69 +178,130 @@ export function BelegUploadDialog({
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (file) {
-      handleFileSelect(file)
-    }
+    const files = Array.from(e.target.files ?? [])
+    if (files.length > 0) validateAndAddFiles(files)
   }
 
-  function handleUploadClick() {
-    if (!selectedFile) return
-
-    // Wenn bereits ein Beleg vorhanden ist, Bestätigung anfordern
-    if (hasExistingDocument) {
-      setShowReplaceConfirm(true)
-      return
-    }
-
-    uploadFile(selectedFile)
+  function removeSelectedFile(index: number) {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+    setError(null)
+    setStep("idle")
   }
 
-  function handleConfirmReplace() {
-    setShowReplaceConfirm(false)
-    if (selectedFile) {
-      uploadFile(selectedFile)
+  async function handleDeleteExisting(doc: TransactionDocument) {
+    setDeletingId(doc.id)
+    setError(null)
+    try {
+      const response = await fetch(
+        `/api/transactions/${transactionId}/documents/${doc.id}`,
+        { method: "DELETE" }
+      )
+      const data = await response.json()
+      if (!response.ok) {
+        setError(data.error || "Beleg konnte nicht entfernt werden.")
+        return
+      }
+      onDocumentsChanged(existingDocuments.filter((d) => d.id !== doc.id))
+    } catch {
+      setError("Netzwerkfehler beim Entfernen des Belegs.")
+    } finally {
+      setDeletingId(null)
     }
   }
 
   const isProcessing = step === "uploading"
+  const canAddMore = remainingSlots - selectedFiles.length > 0
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {hasExistingDocument ? "Beleg ersetzen" : "Beleg hochladen"}
-            </DialogTitle>
-            <DialogDescription className="line-clamp-2">
-              {transactionDescription}
-            </DialogDescription>
-          </DialogHeader>
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Belege verwalten</DialogTitle>
+          <DialogDescription className="line-clamp-2">
+            {transactionDescription}
+          </DialogDescription>
+        </DialogHeader>
 
-          <div className="space-y-4">
-            {/* Drag & Drop Zone */}
+        <div className="space-y-4">
+          {/* Bestehende Belege */}
+          {existingDocuments.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                Vorhandene Belege ({existingDocuments.length}/
+                {MAX_FILES_PER_TRANSACTION})
+              </p>
+              <ul className="space-y-1">
+                {existingDocuments.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm"
+                  >
+                    <a
+                      href={doc.document_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex min-w-0 flex-1 items-center gap-2 truncate hover:underline"
+                      aria-label={`Beleg ${doc.document_name} öffnen`}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{doc.document_name}</span>
+                    </a>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteExisting(doc)}
+                      disabled={deletingId === doc.id || isProcessing}
+                      aria-label={`Beleg ${doc.document_name} entfernen`}
+                    >
+                      {deletingId === doc.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Drag & Drop Zone */}
+          {remainingSlots > 0 && (
             <div
               className={cn(
                 "flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-colors",
-                isDragOver && !isProcessing
+                isDragOver && !isProcessing && canAddMore
                   ? "border-primary bg-primary/5"
                   : "border-muted-foreground/25",
-                isProcessing
+                !canAddMore || isProcessing
                   ? "cursor-not-allowed opacity-50"
                   : "cursor-pointer hover:border-primary/50"
               )}
-              onDrop={isProcessing ? undefined : handleDrop}
-              onDragOver={isProcessing ? undefined : handleDragOver}
-              onDragLeave={isProcessing ? undefined : handleDragLeave}
+              onDrop={
+                isProcessing || !canAddMore ? undefined : handleDrop
+              }
+              onDragOver={
+                isProcessing || !canAddMore ? undefined : handleDragOver
+              }
+              onDragLeave={
+                isProcessing || !canAddMore ? undefined : handleDragLeave
+              }
               onClick={
-                isProcessing ? undefined : () => fileInputRef.current?.click()
+                isProcessing || !canAddMore
+                  ? undefined
+                  : () => fileInputRef.current?.click()
               }
               role="button"
-              tabIndex={isProcessing ? -1 : 0}
-              aria-label="Beleg-Datei zum Hochladen auswählen oder hierher ziehen"
+              tabIndex={isProcessing || !canAddMore ? -1 : 0}
+              aria-label="Belege zum Hochladen auswählen oder hierher ziehen"
               onKeyDown={(e) => {
-                if (!isProcessing && (e.key === "Enter" || e.key === " ")) {
+                if (
+                  !isProcessing &&
+                  canAddMore &&
+                  (e.key === "Enter" || e.key === " ")
+                ) {
                   e.preventDefault()
                   fileInputRef.current?.click()
                 }
@@ -235,8 +311,9 @@ export function BelegUploadDialog({
                 ref={fileInputRef}
                 type="file"
                 className="hidden"
+                multiple
                 onChange={handleInputChange}
-                disabled={isProcessing}
+                disabled={isProcessing || !canAddMore}
                 aria-hidden="true"
               />
 
@@ -249,110 +326,109 @@ export function BelegUploadDialog({
               )}
 
               <p className="mb-1 text-sm font-medium">
-                {selectedFile
-                  ? selectedFile.name
-                  : "Beleg hierher ziehen"}
+                Belege hierher ziehen oder klicken
               </p>
               <p className="text-xs text-muted-foreground">
-                {selectedFile
-                  ? `${(selectedFile.size / 1024).toFixed(0)} KB`
-                  : "Beliebiges Dateiformat (max. 10 MB)"}
+                Bis zu {MAX_FILES_PER_TRANSACTION} Dateien, jeweils max. 10 MB
               </p>
             </div>
+          )}
 
-            {/* Fortschrittsanzeige */}
-            {step === "uploading" && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    Beleg wird hochgeladen...
-                  </span>
-                  <span className="font-medium">{uploadProgress}%</span>
-                </div>
-                <Progress
-                  value={uploadProgress}
-                  aria-label="Upload-Fortschritt"
-                />
-              </div>
-            )}
-
-            {step === "done" && (
-              <Alert>
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertDescription>Beleg erfolgreich hochgeladen.</AlertDescription>
-              </Alert>
-            )}
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Buttons */}
-            <div className="flex justify-end gap-2">
-              {step === "error" && (
-                <Button
-                  variant="outline"
-                  onClick={resetState}
-                  aria-label="Zurücksetzen"
-                >
-                  Zurücksetzen
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={handleClose}
-                disabled={isProcessing}
-                aria-label="Abbrechen"
-              >
-                <X className="mr-2 h-4 w-4" />
-                Abbrechen
-              </Button>
-              {step !== "done" && (
-                <Button
-                  onClick={handleUploadClick}
-                  disabled={!selectedFile || isProcessing}
-                  aria-label="Beleg hochladen"
-                >
-                  {isProcessing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="mr-2 h-4 w-4" />
-                  )}
-                  Hochladen
-                </Button>
-              )}
+          {/* Neu ausgewählte Dateien */}
+          {selectedFiles.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                Zum Hochladen bereit ({selectedFiles.length})
+              </p>
+              <ul className="space-y-1">
+                {selectedFiles.map((f, index) => (
+                  <li
+                    key={`${f.name}-${index}`}
+                    className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                  >
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate">{f.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {formatFileSize(f.size)}
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => removeSelectedFile(index)}
+                      disabled={isProcessing}
+                      aria-label={`${f.name} entfernen`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+          )}
 
-      {/* Bestätigungsdialog beim Ersetzen */}
-      <AlertDialog open={showReplaceConfirm} onOpenChange={setShowReplaceConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Beleg ersetzen?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Für diese Buchung ist bereits ein Beleg vorhanden. Der vorhandene
-              Beleg wird auf Seafile gelöscht und durch den neuen ersetzt.
-              Fortfahren?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel aria-label="Abbrechen">
-              Abbrechen
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmReplace}
-              aria-label="Beleg ersetzen"
+          {/* Fortschrittsanzeige */}
+          {step === "uploading" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Belege werden hochgeladen...
+                </span>
+                <span className="font-medium">{uploadProgress}%</span>
+              </div>
+              <Progress
+                value={uploadProgress}
+                aria-label="Upload-Fortschritt"
+              />
+            </div>
+          )}
+
+          {step === "done" && (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                Belege erfolgreich hochgeladen.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Buttons */}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              disabled={isProcessing}
+              aria-label="Schließen"
             >
-              Ersetzen
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+              <X className="mr-2 h-4 w-4" />
+              Schließen
+            </Button>
+            {selectedFiles.length > 0 && step !== "done" && (
+              <Button
+                onClick={uploadFiles}
+                disabled={isProcessing}
+                aria-label="Belege hochladen"
+              >
+                {isProcessing ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
+                )}
+                Hochladen ({selectedFiles.length})
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -161,6 +161,7 @@ export async function PATCH(
         updated_by,
         statement_id,
         bank_statements!inner(statement_number, file_name, file_path),
+        transaction_documents(id, document_url, document_name, display_order, created_at),
         transaction_categories(
           category:categories(id, name, color, created_at)
         )
@@ -176,7 +177,7 @@ export async function PATCH(
       )
     }
 
-    // transaction_categories → categories flach zurückgeben
+    // transaction_categories → categories / transaction_documents → documents flach zurückgeben
     type RawRow = {
       transaction_categories?: Array<{
         category: {
@@ -186,10 +187,17 @@ export async function PATCH(
           created_at: string
         } | null
       }> | null
+      transaction_documents?: Array<{
+        id: string
+        document_url: string
+        document_name: string
+        display_order: number
+        created_at: string
+      }> | null
     } & Record<string, unknown>
 
     const row = data as unknown as RawRow
-    const { transaction_categories, ...rest } = row
+    const { transaction_categories, transaction_documents, ...rest } = row
     const categories = (transaction_categories ?? [])
       .map((tc) => tc.category)
       .filter(
@@ -200,8 +208,11 @@ export async function PATCH(
           created_at: string
         } => c !== null
       )
+    const documents = [...(transaction_documents ?? [])].sort(
+      (a, b) => a.display_order - b.display_order
+    )
 
-    return NextResponse.json({ ...rest, categories })
+    return NextResponse.json({ ...rest, categories, documents })
   } catch (error) {
     console.error("Transaction PATCH Fehler:", error)
     return NextResponse.json(

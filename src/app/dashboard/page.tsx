@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import type {
   TransactionSummary,
   Transaction,
+  TransactionDocument,
   Category,
   EditableTransactionField,
   TransactionUpdateFields,
@@ -363,15 +364,14 @@ export default function DashboardPage() {
     [transactions, allCategories]
   )
 
-  // PROJ-9: Handler für Beleg-Upload - aktualisiert document_ref lokal
-  const handleDocumentUploaded = useCallback(
-    (transactionId: string, documentRef: string) => {
+  // Handler für Beleg-Änderungen - aktualisiert documents-Array lokal
+  const handleDocumentsChanged = useCallback(
+    (transactionId: string, documents: TransactionDocument[]) => {
       setTransactions((prev) =>
         prev.map((t) =>
-          t.id === transactionId ? { ...t, document_ref: documentRef } : t
+          t.id === transactionId ? { ...t, documents } : t
         )
       )
-      toast.success("Beleg hochgeladen")
     },
     []
   )
@@ -579,7 +579,7 @@ export default function DashboardPage() {
         onUpdateCategories={
           hasPermission("edit_transactions") ? handleUpdateCategories : undefined
         }
-        onDocumentUploaded={handleDocumentUploaded}
+        onDocumentsChanged={handleDocumentsChanged}
         onAbgleichOpen={(tx) => {
           setAbgleichTransaction(tx)
           setAbgleichDialogOpen(true)

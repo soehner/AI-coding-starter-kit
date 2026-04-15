@@ -143,6 +143,15 @@ export interface CategorizationRule {
   created_at: string
 }
 
+// Mehrere Belege pro Buchung (Seafile-Links), siehe Migration 025.
+export interface TransactionDocument {
+  id: string
+  document_url: string
+  document_name: string
+  display_order: number
+  created_at: string
+}
+
 // PROJ-4: Dashboard-Typen
 export interface Transaction {
   id: string
@@ -155,7 +164,10 @@ export interface Transaction {
   balance_after: number
   category: string | null
   note: string | null
+  /** @deprecated Legacy-Einzelreferenz. Neue Uploads landen in `documents`. */
   document_ref: string | null
+  /** Mehrere Belege pro Buchung (max. 5, je 10 MB). Wird vom GET-Endpoint befüllt. */
+  documents: TransactionDocument[]
   statement_ref: string | null
   updated_at: string | null
   updated_by: string | null

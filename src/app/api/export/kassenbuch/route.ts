@@ -116,6 +116,7 @@ export async function GET(request: Request) {
       .from("transactions")
       .select(
         `id, booking_date, value_date, description, amount, balance_after, category, note, document_ref, statement_ref,
+         transaction_documents(document_url, document_name, display_order),
          ${categoryJoinSelect}`
       )
       .order("booking_date", { ascending: true })
@@ -164,13 +165,21 @@ export async function GET(request: Request) {
       transaction_categories?: Array<{
         category: { id: string; name: string } | null
       }> | null
+      transaction_documents?: Array<{
+        document_url: string
+        document_name: string
+        display_order: number
+      }> | null
     }
 
     const rows = ((transactions || []) as unknown as RawTxRow[]).map((t) => {
       const categoryNames = (t.transaction_categories ?? [])
         .map((tc) => tc.category?.name)
         .filter((n): n is string => !!n)
-      return { ...t, category_names: categoryNames }
+      const documentLinks = [...(t.transaction_documents ?? [])]
+        .sort((a, b) => a.display_order - b.display_order)
+        .map((d) => d.document_url)
+      return { ...t, category_names: categoryNames, document_links: documentLinks }
     })
 
     // --- Eröffnungssaldo berechnen ---
@@ -371,8 +380,17 @@ export async function GET(request: Request) {
       }
       row.getCell(12).numFmt = currencyFormat
 
-      // Spalte M: Belege-Referenz
-      row.getCell(13).value = tx.document_ref || ""
+      // Spalte M: Belege-Referenz (mehrere Seafile-Links, zeilenweise getrennt).
+      // Fallback auf den Legacy-Eintrag `document_ref`, falls noch keine
+      // Migration in transaction_documents erfolgt ist.
+      const belegeValue =
+        tx.document_links.length > 0
+          ? tx.document_links.join("\n")
+          : tx.document_ref || ""
+      row.getCell(13).value = belegeValue
+      if (tx.document_links.length > 1) {
+        row.getCell(13).alignment = { wrapText: true, vertical: "top" }
+      }
 
       // Spalte N: Kontoauszug-Referenz
       row.getCell(14).value = tx.statement_ref || ""
