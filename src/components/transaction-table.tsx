@@ -335,7 +335,7 @@ export function TransactionTable({
                 <TableHead className="hidden text-right md:table-cell md:w-[120px]">Saldo</TableHead>
                 <TableHead className="md:w-[110px]">Quelle</TableHead>
                 <TableHead className="md:w-[180px]">Kategorien</TableHead>
-                <TableHead className="hidden w-[180px] lg:table-cell">Bemerkung</TableHead>
+                <TableHead className="hidden w-[140px] lg:table-cell">Bemerkung</TableHead>
                 <TableHead className="hidden w-[120px] xl:table-cell">Beleg</TableHead>
                 <TableHead className="hidden w-[100px] xl:table-cell">
                   <span className="flex items-center gap-1">
@@ -344,7 +344,9 @@ export function TransactionTable({
                   </span>
                 </TableHead>
                 {canEdit && (
-                  <TableHead className="w-[50px] text-right md:w-[60px]">Aktion</TableHead>
+                  <TableHead className="sticky right-0 z-20 w-[50px] bg-background text-right shadow-[-4px_0_6px_-3px_rgba(0,0,0,0.08)] md:w-[60px]">
+                    Aktion
+                  </TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -368,7 +370,7 @@ export function TransactionTable({
                   const txCategories: Category[] = t.categories ?? []
 
                   return (
-                    <TableRow key={t.id} data-state={isSelected ? "selected" : undefined}>
+                    <TableRow key={t.id} data-state={isSelected ? "selected" : undefined} className="group">
                       {showSelectionColumn && (
                         <TableCell className="hidden w-[44px] md:table-cell">
                           <Checkbox
@@ -384,7 +386,7 @@ export function TransactionTable({
                       </TableCell>
 
                       {/* Buchungstext - editierbar */}
-                      <TableCell className="max-w-[180px] text-xs md:max-w-[300px] md:text-sm [&_.line-clamp-1]:line-clamp-2 md:[&_.line-clamp-1]:line-clamp-1">
+                      <TableCell className="max-w-[180px] text-xs md:max-w-[220px] md:text-sm [&_.line-clamp-1]:line-clamp-2">
                         <InlineEditField
                           value={t.description}
                           onSave={(val) => handleFieldSave(t.id, "description", val)}
@@ -467,7 +469,7 @@ export function TransactionTable({
                       </TableCell>
 
                       {/* Bemerkung - editierbar (Textarea) */}
-                      <TableCell className="hidden max-w-[180px] lg:table-cell">
+                      <TableCell className="hidden max-w-[140px] text-xs lg:table-cell lg:text-sm [&_.line-clamp-1]:line-clamp-2">
                         <InlineEditField
                           value={t.note || ""}
                           onSave={(val) => handleFieldSave(t.id, "note", val)}
@@ -674,7 +676,7 @@ export function TransactionTable({
 
                       {/* Aktion — Dropdown mit Bearbeiten + Löschen */}
                       {canEdit && (
-                        <TableCell className="p-1 text-right md:p-4">
+                        <TableCell className="sticky right-0 z-10 bg-background p-1 text-right shadow-[-4px_0_6px_-3px_rgba(0,0,0,0.08)] group-hover:bg-muted/50 group-data-[state=selected]:bg-muted md:p-4">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
