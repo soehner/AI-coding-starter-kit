@@ -501,7 +501,7 @@ export default function DashboardPage() {
       )}
 
       {/* Filter-Leiste + Export */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="flex-1">
           <TransactionFilterBar
             availableYears={summary?.availableYears ?? []}

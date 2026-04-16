@@ -138,23 +138,41 @@ export default function EinstellungenPage() {
       </div>
 
       <Tabs defaultValue={defaultTab} className="max-w-3xl">
-        <TabsList>
-          {isAdmin && (
-            <TabsTrigger value="integration">Integration</TabsTrigger>
-          )}
-          {isAdmin && (
-            <TabsTrigger value="bankzugang">Bankzugang</TabsTrigger>
-          )}
-          {isAdmin && (
-            <TabsTrigger value="kategorien">Kategorien</TabsTrigger>
-          )}
-          {isAdmin && <TabsTrigger value="regeln">Regeln</TabsTrigger>}
-          {isAdmin && (
-            <TabsTrigger value="antrag-genehmiger">Antrag-Genehmiger</TabsTrigger>
-          )}
-          <TabsTrigger value="sicherheit">Sicherheit</TabsTrigger>
-          <TabsTrigger value="passwort">Passwort</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList className="w-max min-w-full">
+            {isAdmin && (
+              <TabsTrigger value="integration" className="px-2 md:px-3">
+                Integration
+              </TabsTrigger>
+            )}
+            {isAdmin && (
+              <TabsTrigger value="bankzugang" className="px-2 md:px-3">
+                Bankzugang
+              </TabsTrigger>
+            )}
+            {isAdmin && (
+              <TabsTrigger value="kategorien" className="px-2 md:px-3">
+                Kategorien
+              </TabsTrigger>
+            )}
+            {isAdmin && (
+              <TabsTrigger value="regeln" className="px-2 md:px-3">
+                Regeln
+              </TabsTrigger>
+            )}
+            {isAdmin && (
+              <TabsTrigger value="antrag-genehmiger" className="px-2 md:px-3">
+                Antrag-Genehmiger
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="sicherheit" className="px-2 md:px-3">
+              Sicherheit
+            </TabsTrigger>
+            <TabsTrigger value="passwort" className="px-2 md:px-3">
+              Passwort
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {isAdmin && (
           <TabsContent value="integration" className="space-y-8 pt-4">

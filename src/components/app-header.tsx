@@ -74,7 +74,7 @@ export function AppHeader() {
                 className="h-7 w-7 object-contain"
               />
             </div>
-            <span className="bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
+            <span className="hidden bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent sm:inline">
               CBS-Finanz
             </span>
           </Link>
@@ -136,7 +136,10 @@ export function AppHeader() {
                     </Avatar>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56 max-w-[calc(100vw-1rem)]"
+                >
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">

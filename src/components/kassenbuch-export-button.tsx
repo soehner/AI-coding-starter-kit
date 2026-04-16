@@ -68,6 +68,7 @@ export function KassenbuchExportButton({
       onClick={handleExport}
       disabled={isExporting}
       aria-label="Kassenbuch als Excel exportieren"
+      className="w-full md:w-auto"
     >
       {isExporting ? (
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />

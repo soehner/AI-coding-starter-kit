@@ -182,12 +182,12 @@ export function GenehmigungTabelle({
     <div className="space-y-4">
       {/* Filterleiste */}
       <div
-        className="flex flex-col gap-3 sm:flex-row sm:items-center"
+        className="flex flex-col gap-3 md:flex-row md:items-center"
         role="search"
         aria-label="Anträge filtern"
       >
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[180px]" aria-label="Status filtern">
+          <SelectTrigger className="w-full md:w-[180px]" aria-label="Status filtern">
             <SelectValue placeholder="Alle Status" />
           </SelectTrigger>
           <SelectContent>
@@ -220,16 +220,17 @@ export function GenehmigungTabelle({
         </div>
       ) : (
         <div className="rounded-md border">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
-                <TableHead>Datum</TableHead>
-                <TableHead>Bemerkung</TableHead>
-                <TableHead className="hidden sm:table-cell">Rollen</TableHead>
-                <TableHead className="hidden md:table-cell">Verknüpfung</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Aktionen</TableHead>
+                <TableHead className="text-xs md:text-sm">Datum</TableHead>
+                <TableHead className="text-xs md:text-sm">Bemerkung</TableHead>
+                <TableHead className="hidden md:table-cell">Rollen</TableHead>
+                <TableHead className="hidden lg:table-cell">Verknüpfung</TableHead>
+                <TableHead className="text-xs md:text-sm">Status</TableHead>
+                <TableHead className="text-right text-xs md:text-sm">Aktionen</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -269,18 +270,18 @@ export function GenehmigungTabelle({
                             </Button>
                           </CollapsibleTrigger>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap">
+                        <TableCell className="whitespace-nowrap text-xs md:text-sm">
                           {formatDate(request.created_at)}
                         </TableCell>
-                        <TableCell className="max-w-[200px] truncate">
+                        <TableCell className="max-w-[140px] truncate text-xs md:max-w-[200px] md:text-sm">
                           {request.note}
                         </TableCell>
-                        <TableCell className="hidden sm:table-cell">
+                        <TableCell className="hidden md:table-cell">
                           {request.required_roles
                             .map((r) => ROLE_LABELS[r])
                             .join(", ")}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell uppercase text-xs font-medium">
+                        <TableCell className="hidden lg:table-cell uppercase text-xs font-medium">
                           {request.required_roles.length > 1
                             ? request.link_type
                             : "—"}
@@ -455,6 +456,7 @@ export function GenehmigungTabelle({
               })}
             </TableBody>
           </Table>
+          </div>
         </div>
       )}
 

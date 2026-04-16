@@ -117,12 +117,17 @@ function SkeletonRows({ showCheckbox }: { showCheckbox: boolean }) {
     <>
       {Array.from({ length: 8 }).map((_, i) => (
         <TableRow key={i}>
-          {showCheckbox && <TableCell><Skeleton className="h-4 w-4" /></TableCell>}
+          {showCheckbox && (
+            <TableCell className="hidden md:table-cell">
+              <Skeleton className="h-4 w-4" />
+            </TableCell>
+          )}
           <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-48" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-          <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell><Skeleton className="h-4 w-32 md:w-48" /></TableCell>
+          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell className="md:hidden"><Skeleton className="h-4 w-20" /></TableCell>
+          <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
           <TableCell><Skeleton className="h-4 w-16" /></TableCell>
           <TableCell><Skeleton className="h-4 w-24" /></TableCell>
           <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
@@ -231,7 +236,7 @@ export function TransactionTable({
             <TableHeader>
               <TableRow>
                 {showSelectionColumn && (
-                  <TableHead className="w-[44px]">
+                  <TableHead className="hidden w-[44px] md:table-cell">
                     <Checkbox
                       checked={headerCheckboxState}
                       onCheckedChange={(value) =>
@@ -241,11 +246,11 @@ export function TransactionTable({
                     />
                   </TableHead>
                 )}
-                <TableHead className="w-[110px]">
+                <TableHead className="md:w-[110px]">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="-ml-3 h-8 font-medium"
+                    className="-ml-3 h-8 text-xs font-medium md:text-sm"
                     onClick={() => onSort("booking_date")}
                     aria-label="Nach Datum sortieren"
                   >
@@ -253,11 +258,11 @@ export function TransactionTable({
                     <SortIcon field="booking_date" currentSort={sortBy} currentDir={sortDir} />
                   </Button>
                 </TableHead>
-                <TableHead className="min-w-[200px]">
+                <TableHead className="md:min-w-[200px]">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="-ml-3 h-8 font-medium"
+                    className="-ml-3 h-8 text-xs font-medium md:text-sm"
                     onClick={() => onSort("description")}
                     aria-label="Nach Buchungstext sortieren"
                   >
@@ -265,7 +270,8 @@ export function TransactionTable({
                     <SortIcon field="description" currentSort={sortBy} currentDir={sortDir} />
                   </Button>
                 </TableHead>
-                <TableHead className="w-[120px] text-right">
+                {/* Desktop: Einnahme + Ausgabe getrennt */}
+                <TableHead className="hidden text-right md:table-cell md:w-[120px]">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -277,10 +283,23 @@ export function TransactionTable({
                     <SortIcon field="amount" currentSort={sortBy} currentDir={sortDir} />
                   </Button>
                 </TableHead>
-                <TableHead className="w-[120px] text-right">Ausgabe</TableHead>
-                <TableHead className="w-[120px] text-right">Saldo</TableHead>
-                <TableHead className="w-[110px]">Quelle</TableHead>
-                <TableHead className="w-[180px]">Kategorien</TableHead>
+                <TableHead className="hidden text-right md:table-cell md:w-[120px]">Ausgabe</TableHead>
+                {/* Mobile: Betrag zusammengeführt */}
+                <TableHead className="text-right md:hidden">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-mr-3 ml-auto h-8 text-xs font-medium"
+                    onClick={() => onSort("amount")}
+                    aria-label="Nach Betrag sortieren"
+                  >
+                    Betrag
+                    <SortIcon field="amount" currentSort={sortBy} currentDir={sortDir} />
+                  </Button>
+                </TableHead>
+                <TableHead className="hidden text-right md:table-cell md:w-[120px]">Saldo</TableHead>
+                <TableHead className="md:w-[110px]">Quelle</TableHead>
+                <TableHead className="md:w-[180px]">Kategorien</TableHead>
                 <TableHead className="hidden w-[180px] lg:table-cell">Bemerkung</TableHead>
                 <TableHead className="hidden w-[120px] xl:table-cell">Beleg</TableHead>
                 <TableHead className="hidden w-[100px] xl:table-cell">
@@ -290,7 +309,7 @@ export function TransactionTable({
                   </span>
                 </TableHead>
                 {canEdit && (
-                  <TableHead className="w-[60px] text-right">Aktion</TableHead>
+                  <TableHead className="w-[50px] text-right md:w-[60px]">Aktion</TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -300,7 +319,7 @@ export function TransactionTable({
               ) : transactions.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={(showSelectionColumn ? 1 : 0) + (canEdit ? 11 : 10)}
+                    colSpan={(showSelectionColumn ? 1 : 0) + (canEdit ? 12 : 11)}
                     className="h-32 text-center text-muted-foreground"
                   >
                     Keine Buchungen gefunden. Passen Sie die Filter an oder importieren Sie Kontoauszüge.
@@ -316,7 +335,7 @@ export function TransactionTable({
                   return (
                     <TableRow key={t.id} data-state={isSelected ? "selected" : undefined}>
                       {showSelectionColumn && (
-                        <TableCell className="w-[44px]">
+                        <TableCell className="hidden w-[44px] md:table-cell">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => onToggleSelect(t.id)}
@@ -325,12 +344,12 @@ export function TransactionTable({
                         </TableCell>
                       )}
                       {/* Datum - schreibgeschützt */}
-                      <TableCell className="whitespace-nowrap text-sm">
+                      <TableCell className="whitespace-nowrap text-xs md:text-sm">
                         {formatDate(t.booking_date)}
                       </TableCell>
 
                       {/* Buchungstext - editierbar */}
-                      <TableCell className="max-w-[300px] text-sm">
+                      <TableCell className="max-w-[180px] text-xs md:max-w-[300px] md:text-sm [&_.line-clamp-1]:line-clamp-2 md:[&_.line-clamp-1]:line-clamp-1">
                         <InlineEditField
                           value={t.description}
                           onSave={(val) => handleFieldSave(t.id, "description", val)}
@@ -342,8 +361,8 @@ export function TransactionTable({
                         />
                       </TableCell>
 
-                      {/* Einnahme - schreibgeschützt */}
-                      <TableCell className="whitespace-nowrap text-right text-sm">
+                      {/* Einnahme - schreibgeschützt (Desktop) */}
+                      <TableCell className="hidden whitespace-nowrap text-right text-sm md:table-cell">
                         {isIncome ? (
                           <span className="font-medium text-green-600">
                             {formatCurrency(amount)}
@@ -351,8 +370,8 @@ export function TransactionTable({
                         ) : null}
                       </TableCell>
 
-                      {/* Ausgabe - schreibgeschützt */}
-                      <TableCell className="whitespace-nowrap text-right text-sm">
+                      {/* Ausgabe - schreibgeschützt (Desktop) */}
+                      <TableCell className="hidden whitespace-nowrap text-right text-sm md:table-cell">
                         {!isIncome ? (
                           <span className="font-medium text-red-600">
                             {formatCurrency(Math.abs(amount))}
@@ -360,8 +379,21 @@ export function TransactionTable({
                         ) : null}
                       </TableCell>
 
-                      {/* Saldo - schreibgeschützt */}
-                      <TableCell className="whitespace-nowrap text-right text-sm font-medium">
+                      {/* Mobile: Betrag (Einnahme + Ausgabe kombiniert) */}
+                      <TableCell className="whitespace-nowrap text-right text-xs md:hidden">
+                        {isIncome ? (
+                          <span className="font-medium text-green-600">
+                            {formatCurrency(amount)}
+                          </span>
+                        ) : (
+                          <span className="font-medium text-red-600">
+                            {formatCurrency(Math.abs(amount))}
+                          </span>
+                        )}
+                      </TableCell>
+
+                      {/* Saldo - schreibgeschützt (Desktop) */}
+                      <TableCell className="hidden whitespace-nowrap text-right text-sm font-medium md:table-cell">
                         {formatCurrency(Number(t.balance_after))}
                       </TableCell>
 
@@ -379,7 +411,7 @@ export function TransactionTable({
                       </TableCell>
 
                       {/* Kategorien - PROJ-12 (inline editierbar) */}
-                      <TableCell className="max-w-[180px]">
+                      <TableCell className="max-w-[140px] md:max-w-[180px]">
                         {onUpdateCategories ? (
                           <InlineCategoryEdit
                             transactionId={t.id}
@@ -607,7 +639,7 @@ export function TransactionTable({
 
                       {/* Aktion — Edit-Dialog öffnen */}
                       {canEdit && (
-                        <TableCell className="text-right">
+                        <TableCell className="p-1 text-right md:p-4">
                           <TooltipProvider>
                             <Tooltip>
                               <TooltipTrigger asChild>

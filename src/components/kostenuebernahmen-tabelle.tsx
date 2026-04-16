@@ -205,25 +205,25 @@ function AntragRow({
             {isExpanded ? "Details ausblenden" : "Details einblenden"}
           </span>
         </TableCell>
-        <TableCell className="whitespace-nowrap text-sm">
+        <TableCell className="whitespace-nowrap text-xs md:text-sm">
           {formatDate(antrag.created_at)}
         </TableCell>
-        <TableCell className="font-medium">
+        <TableCell className="text-xs font-medium md:text-sm">
           {antrag.applicant_first_name} {antrag.applicant_last_name}
         </TableCell>
-        <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
           {antrag.applicant_email}
         </TableCell>
-        <TableCell className="whitespace-nowrap text-right font-mono text-sm">
+        <TableCell className="whitespace-nowrap text-right font-mono text-xs md:text-sm">
           {formatCents(antrag.amount_cents)} EUR
         </TableCell>
         <TableCell
-          className="hidden max-w-[200px] truncate text-sm md:table-cell"
+          className="hidden max-w-[200px] truncate text-sm lg:table-cell"
           title={antrag.purpose}
         >
           {antrag.purpose}
         </TableCell>
-        <TableCell className="hidden md:table-cell">
+        <TableCell className="hidden lg:table-cell">
           {antrag.antrag_dokumente.length > 0 ? (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Paperclip className="h-3 w-3" />
@@ -236,10 +236,10 @@ function AntragRow({
         <TableCell>
           <StatusBadge status={antrag.status} />
         </TableCell>
-        <TableCell className="hidden lg:table-cell">
+        <TableCell className="hidden xl:table-cell">
           <VoteCountSummary entscheidungen={antrag.antrag_entscheidungen} />
         </TableCell>
-        <TableCell className="hidden sm:table-cell">
+        <TableCell className="hidden md:table-cell">
           <EmailStatusBadge status={antrag.email_status} />
         </TableCell>
       </TableRow>
@@ -686,19 +686,20 @@ export function KostenuebernahmenTabelle({
   return (
     <>
       <div className="rounded-md border">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-8" />
-              <TableHead>Datum</TableHead>
-              <TableHead>Antragsteller</TableHead>
-              <TableHead className="hidden sm:table-cell">E-Mail</TableHead>
-              <TableHead className="text-right">Betrag</TableHead>
-              <TableHead className="hidden md:table-cell">Verwendungszweck</TableHead>
-              <TableHead className="hidden md:table-cell">Anhänge</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="hidden lg:table-cell">Stimmen</TableHead>
-              <TableHead className="hidden sm:table-cell">E-Mail</TableHead>
+              <TableHead className="text-xs md:text-sm">Datum</TableHead>
+              <TableHead className="text-xs md:text-sm">Antragsteller</TableHead>
+              <TableHead className="hidden md:table-cell">E-Mail</TableHead>
+              <TableHead className="text-right text-xs md:text-sm">Betrag</TableHead>
+              <TableHead className="hidden lg:table-cell">Verwendungszweck</TableHead>
+              <TableHead className="hidden lg:table-cell">Anhänge</TableHead>
+              <TableHead className="text-xs md:text-sm">Status</TableHead>
+              <TableHead className="hidden xl:table-cell">Stimmen</TableHead>
+              <TableHead className="hidden md:table-cell">E-Mail</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -717,6 +718,7 @@ export function KostenuebernahmenTabelle({
             ))}
           </TableBody>
         </Table>
+        </div>
       </div>
 
       <EditAntragDialog

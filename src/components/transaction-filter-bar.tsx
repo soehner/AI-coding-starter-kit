@@ -89,12 +89,12 @@ export function TransactionFilterBar({
 
   return (
     <div
-      className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center"
+      className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center"
       role="search"
       aria-label="Buchungen filtern"
     >
       <Select value={selectedYear} onValueChange={onYearChange}>
-        <SelectTrigger className="w-full sm:w-[140px]" aria-label="Jahr auswählen">
+        <SelectTrigger className="w-full md:w-[140px]" aria-label="Jahr auswählen">
           <SelectValue placeholder="Alle Jahre" />
         </SelectTrigger>
         <SelectContent>
@@ -108,7 +108,7 @@ export function TransactionFilterBar({
       </Select>
 
       <Select value={selectedMonth} onValueChange={onMonthChange}>
-        <SelectTrigger className="w-full sm:w-[160px]" aria-label="Monat auswählen">
+        <SelectTrigger className="w-full md:w-[160px]" aria-label="Monat auswählen">
           <SelectValue placeholder="Alle Monate" />
         </SelectTrigger>
         <SelectContent>
@@ -129,7 +129,7 @@ export function TransactionFilterBar({
             aria-expanded={categoryPopoverOpen}
             aria-label="Nach Kategorie filtern"
             className={cn(
-              "w-full justify-between font-normal sm:w-[200px]",
+              "w-full justify-between font-normal md:w-[200px]",
               selectedCategoryFilter.length === 0 && "text-muted-foreground"
             )}
           >
@@ -140,7 +140,10 @@ export function TransactionFilterBar({
             <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[280px] p-0" align="start">
+        <PopoverContent
+          className="w-[280px] max-w-[calc(100vw-2rem)] p-0"
+          align="start"
+        >
           <div className="max-h-[300px] overflow-auto p-1">
             <button
               type="button"
@@ -196,7 +199,7 @@ export function TransactionFilterBar({
         </PopoverContent>
       </Popover>
 
-      <div className="relative flex-1 sm:min-w-[220px]">
+      <div className="relative w-full flex-1 md:min-w-[220px]">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
         <Input
           type="search"
@@ -216,7 +219,7 @@ export function TransactionFilterBar({
           onClick={() => onOnlyUnconfirmedChange(!onlyUnconfirmed)}
           aria-pressed={onlyUnconfirmed}
           aria-label="Nur unbestätigte Abgleich-Einträge anzeigen"
-          className="w-full sm:w-auto"
+          className="w-full md:w-auto"
         >
           <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
           Nur unbestätigte
@@ -224,7 +227,7 @@ export function TransactionFilterBar({
       )}
 
       {selectedCategoryFilter.length > 0 && (
-        <div className="hidden w-full flex-wrap gap-1 sm:flex">
+        <div className="hidden w-full flex-wrap gap-1 md:flex">
           {selectedCategoryFilter.map((value) => {
             if (value === UNCATEGORIZED_FILTER_VALUE) {
               return (

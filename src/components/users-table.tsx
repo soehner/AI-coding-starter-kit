@@ -210,18 +210,19 @@ export function UsersTable({
       )}
 
       <div className="rounded-md border">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>E-Mail</TableHead>
-              <TableHead>Rolle</TableHead>
+              <TableHead className="text-xs md:text-sm">E-Mail</TableHead>
+              <TableHead className="text-xs md:text-sm">Rolle</TableHead>
               <TableHead className="hidden lg:table-cell">Zusatzrollen</TableHead>
               <TableHead className="hidden sm:table-cell">Status</TableHead>
               <TableHead className="hidden md:table-cell">2FA</TableHead>
-              <TableHead className="hidden md:table-cell">
+              <TableHead className="hidden lg:table-cell">
                 Registriert am
               </TableHead>
-              <TableHead className="text-right">Aktionen</TableHead>
+              <TableHead className="text-right text-xs md:text-sm">Aktionen</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -240,7 +241,7 @@ export function UsersTable({
                       className={canExpand ? "cursor-pointer" : undefined}
                       onClick={canExpand ? () => toggleExpanded(user.id) : undefined}
                     >
-                      <TableCell className="font-medium">
+                      <TableCell className="break-all text-xs font-medium md:break-normal md:text-sm">
                         <div className="flex items-center gap-2">
                           {canExpand && (
                             <Button
@@ -367,7 +368,7 @@ export function UsersTable({
                           </Badge>
                         )}
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
+                      <TableCell className="hidden lg:table-cell">
                         {formatDate(user.created_at)}
                       </TableCell>
                       <TableCell className="text-right">
@@ -439,6 +440,7 @@ export function UsersTable({
             })}
           </TableBody>
         </Table>
+        </div>
       </div>
     </div>
   )
