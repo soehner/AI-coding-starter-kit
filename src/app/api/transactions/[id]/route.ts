@@ -221,3 +221,76 @@ export async function PATCH(
     )
   }
 }
+
+/**
+ * DELETE /api/transactions/[id]
+ * Löscht eine einzelne Buchung. Benötigt dieselbe Berechtigung wie
+ * Bearbeiten (`edit_transactions`). Zugehörige Kategorien-Verknüpfungen
+ * und Belege werden über die FK-CASCADE der DB automatisch entfernt.
+ *
+ * Eingeschränkte Betrachter (PROJ-14): Wenn die Buchung nicht in den
+ * erlaubten Kategorien liegt, geben wir 404 zurück (kein Info-Leak).
+ */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+
+    const auth = await requirePermission("edit_transactions")
+    if (auth.error) return auth.error
+
+    const supabase = await createServerSupabaseClient()
+
+    // Existenz prüfen
+    const { data: existing } = await supabase
+      .from("transactions")
+      .select("id")
+      .eq("id", id)
+      .single()
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Buchung nicht gefunden" },
+        { status: 404 }
+      )
+    }
+
+    // PROJ-14: Sichtbarkeit prüfen
+    const accessFilter = await getCategoryFilter(
+      auth.profile.id,
+      auth.profile.role
+    )
+    if (accessFilter.restricted) {
+      const visible = await isTransactionVisible(id, accessFilter)
+      if (!visible) {
+        return NextResponse.json(
+          { error: "Buchung nicht gefunden" },
+          { status: 404 }
+        )
+      }
+    }
+
+    const { error } = await supabase
+      .from("transactions")
+      .delete()
+      .eq("id", id)
+
+    if (error) {
+      console.error("Fehler beim Löschen der Buchung:", error)
+      return NextResponse.json(
+        { error: "Fehler beim Löschen: " + error.message },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json({ success: true, id })
+  } catch (error) {
+    console.error("Transaction DELETE Fehler:", error)
+    return NextResponse.json(
+      { error: "Interner Serverfehler" },
+      { status: 500 }
+    )
+  }
+}

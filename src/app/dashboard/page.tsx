@@ -376,6 +376,25 @@ export default function DashboardPage() {
     []
   )
 
+  // Handler für Löschen einer Buchung
+  const handleDeleteTransaction = useCallback(
+    async (id: string) => {
+      const response = await fetch(`/api/transactions/${id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        toast.error(data.error ?? "Fehler beim Löschen der Buchung.")
+        throw new Error(data.error ?? "Fehler beim Löschen der Buchung.")
+      }
+      setTransactions((prev) => prev.filter((t) => t.id !== id))
+      toast.success("Buchung gelöscht.")
+      // Summary neu laden, damit Kontostand und KPIs stimmen
+      fetchSummary()
+    },
+    [fetchSummary]
+  )
+
   // PROJ-12: Selection-Handler
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -584,6 +603,9 @@ export default function DashboardPage() {
           setAbgleichTransaction(tx)
           setAbgleichDialogOpen(true)
         }}
+        onDeleteTransaction={
+          hasPermission("edit_transactions") ? handleDeleteTransaction : undefined
+        }
         allCategories={allCategories}
       />
 

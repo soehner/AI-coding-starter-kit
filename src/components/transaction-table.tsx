@@ -36,9 +36,28 @@ import {
   Upload,
   ExternalLink,
   Paperclip,
+  MoreHorizontal,
   Pencil,
+  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { InlineEditField } from "@/components/inline-edit-field"
 import { InlineCategoryEdit } from "@/components/inline-category-edit"
 import { BelegUploadDialog } from "@/components/beleg-upload-dialog"
@@ -75,6 +94,8 @@ interface TransactionTableProps {
   onDocumentsChanged?: (transactionId: string, documents: TransactionDocument[]) => void
   /** PROJ-16: Wird aufgerufen, wenn der Benutzer auf ein Status-Badge klickt. */
   onAbgleichOpen?: (transaction: Transaction) => void
+  /** Löscht die angegebene Buchung (nur wenn canEdit). */
+  onDeleteTransaction?: (id: string) => Promise<void>
   allCategories?: Category[]
 }
 
@@ -159,12 +180,26 @@ export function TransactionTable({
   onUpdateCategories,
   onDocumentsChanged,
   onAbgleichOpen,
+  onDeleteTransaction,
   allCategories = [],
 }: TransactionTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadTransaction, setUploadTransaction] = useState<Transaction | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editTransaction, setEditTransaction] = useState<Transaction | null>(null)
+  const [deleteTransaction, setDeleteTransaction] = useState<Transaction | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTransaction || !onDeleteTransaction) return
+    setIsDeleting(true)
+    try {
+      await onDeleteTransaction(deleteTransaction.id)
+      setDeleteTransaction(null)
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [deleteTransaction, onDeleteTransaction])
 
   const showSelectionColumn = canEdit
 
@@ -637,25 +672,39 @@ export function TransactionTable({
                         )}
                       </TableCell>
 
-                      {/* Aktion — Edit-Dialog öffnen */}
+                      {/* Aktion — Dropdown mit Bearbeiten + Löschen */}
                       {canEdit && (
                         <TableCell className="p-1 text-right md:p-4">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => handleOpenEditDialog(t)}
-                                  aria-label={`Buchung vom ${formatDate(t.booking_date)} bearbeiten`}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Buchung bearbeiten</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label={`Aktionen für Buchung vom ${formatDate(t.booking_date)}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleOpenEditDialog(t)}>
+                                <Pencil className="mr-2 h-3.5 w-3.5" />
+                                Bearbeiten
+                              </DropdownMenuItem>
+                              {onDeleteTransaction && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => setDeleteTransaction(t)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                    Löschen
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </TableCell>
                       )}
                     </TableRow>
@@ -746,6 +795,44 @@ export function TransactionTable({
         onOpenChange={setEditDialogOpen}
         onSave={handleEditSave}
       />
+
+      {/* Lösch-Bestätigungs-Dialog */}
+      <AlertDialog
+        open={deleteTransaction !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeleteTransaction(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Buchung wirklich löschen?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>Diese Aktion kann nicht rückgängig gemacht werden. Die Buchung wird dauerhaft entfernt — einschließlich zugeordneter Kategorien und Belege.</p>
+                {deleteTransaction && (
+                  <div className="rounded-md border bg-muted/40 p-3 text-sm text-foreground">
+                    <div className="font-medium">{formatDate(deleteTransaction.booking_date)} — {formatCurrency(deleteTransaction.amount)}</div>
+                    <div className="text-muted-foreground line-clamp-2">{deleteTransaction.description}</div>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void handleConfirmDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Lösche…" : "Endgültig löschen"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
