@@ -84,19 +84,50 @@ export async function GET(request: Request) {
       return fehlerRedirect("Keine Konten von Enable Banking erhalten.")
     }
 
-    // Nur das erste Konto übernehmen (Spec: nur ein Vereinskonto).
-    // Falls mehrere gelistet sind: zusätzliche Konten loggen, aber nicht
-    // speichern.
-    if (session.accounts.length > 1) {
+    // Konto-Auswahl: Wenn ENABLEBANKING_ACCOUNT_IBAN_FILTER gesetzt ist,
+    // suchen wir gezielt das Konto mit exakt dieser IBAN (Whitelist-Modus:
+    // der Verein hat mehrere Konten bei Enable Banking verknüpft, aber nur
+    // das Vereinskonto soll in CBS-Finanz landen). Sonst Fallback auf das
+    // erste zurückgelieferte Konto (Single-Account-Fall).
+    const normalisiereIban = (iban: string | null | undefined) =>
+      iban ? iban.toUpperCase().replace(/\s+/g, "") : ""
+
+    const ibanFilter = normalisiereIban(
+      process.env.ENABLEBANKING_ACCOUNT_IBAN_FILTER
+    )
+
+    let account = session.accounts[0]
+    if (ibanFilter) {
+      const treffer = session.accounts.find(
+        (a) =>
+          normalisiereIban(a.iban) === ibanFilter ||
+          normalisiereIban(a.account_id?.iban) === ibanFilter
+      )
+      if (!treffer) {
+        console.error(
+          "IBAN-Filter gesetzt, aber kein passendes Konto gefunden:",
+          {
+            filter: ibanFilter,
+            verfuegbar: session.accounts.map((a) => ({
+              uid: a.uid,
+              iban: a.iban ?? a.account_id?.iban ?? null,
+            })),
+          }
+        )
+        return fehlerRedirect(
+          `Konto mit IBAN ${ibanFilter} wurde nicht zurückgeliefert. Bitte im Enable-Banking-Dashboard prüfen, ob das Konto verknüpft ist.`
+        )
+      }
+      account = treffer
+    } else if (session.accounts.length > 1) {
       console.log(
-        "Enable Banking lieferte mehrere Konten, es wird nur das erste verwendet:",
+        "Enable Banking lieferte mehrere Konten, es wird nur das erste verwendet (kein IBAN-Filter gesetzt):",
         session.accounts.map((a) => ({
           uid: a.uid,
           iban: a.iban ?? a.account_id?.iban ?? null,
         }))
       )
     }
-    const account = session.accounts[0]
     const accountUid = account.uid
 
     // Consent-Ablauf aus Session ziehen, sonst Fallback auf Default
