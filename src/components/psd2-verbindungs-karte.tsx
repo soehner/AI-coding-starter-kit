@@ -203,7 +203,19 @@ export function Psd2VerbindungsKarte() {
       if (!res.ok) {
         throw new Error(data.error || "Abruf fehlgeschlagen.")
       }
-      toast.success("Bank-Abruf erfolgreich durchgeführt.")
+      const neue = Number(data.neue ?? 0)
+      const aktualisiert = Number(data.aktualisiert ?? 0)
+      const fehler = Number(data.fehler ?? 0)
+      const autoKategorisiert = Number(data.autoKategorisiert ?? 0)
+      const teile: string[] = [`${neue} neu`]
+      if (aktualisiert > 0) teile.push(`${aktualisiert} bereits vorhanden`)
+      if (autoKategorisiert > 0)
+        teile.push(`${autoKategorisiert} automatisch kategorisiert`)
+      if (fehler > 0) teile.push(`${fehler} Fehler`)
+      toast.success(`Bank-Abruf erfolgreich: ${teile.join(", ")}`)
+      if (data.regelWarnung) {
+        toast.warning(String(data.regelWarnung))
+      }
       await fetchStatus()
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unbekannter Fehler."

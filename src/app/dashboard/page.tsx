@@ -16,7 +16,17 @@ import { TransactionAbgleichDialog } from "@/components/transaction-abgleich-dia
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Tags, X } from "lucide-react"
+import { AlertCircle, Tags, Trash2, X } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { toast } from "sonner"
 import type {
   TransactionSummary,
@@ -61,6 +71,8 @@ export default function DashboardPage() {
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false)
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false)
   const allCategories = useCategories()
 
   // PROJ-16: Abgleich-Filter & Dialog
@@ -395,6 +407,45 @@ export default function DashboardPage() {
     [fetchSummary]
   )
 
+  // Handler für Bulk-Löschen mehrerer ausgewählter Buchungen
+  const handleBulkDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    setIsBulkDeleting(true)
+    try {
+      const response = await fetch("/api/transactions/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        toast.error(data.error ?? "Fehler beim Löschen der Buchungen.")
+        return
+      }
+      const geloescht = Number(data.deleted ?? 0)
+      const uebersprungen = Number(data.skipped ?? 0)
+      setTransactions((prev) => prev.filter((t) => !selectedIds.has(t.id)))
+      setSelectedIds(new Set())
+      setBulkDeleteConfirmOpen(false)
+      if (uebersprungen > 0) {
+        toast.success(
+          `${geloescht} Buchung${geloescht === 1 ? "" : "en"} gelöscht (${uebersprungen} übersprungen, da nicht sichtbar).`
+        )
+      } else {
+        toast.success(
+          `${geloescht} Buchung${geloescht === 1 ? "" : "en"} gelöscht.`
+        )
+      }
+      fetchSummary()
+    } catch (err) {
+      console.error(err)
+      toast.error("Fehler beim Löschen der Buchungen.")
+    } finally {
+      setIsBulkDeleting(false)
+    }
+  }, [selectedIds, fetchSummary])
+
   // PROJ-12: Selection-Handler
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -566,6 +617,15 @@ export default function DashboardPage() {
             </Button>
             <Button
               size="sm"
+              variant="destructive"
+              onClick={() => setBulkDeleteConfirmOpen(true)}
+              aria-label="Ausgewählte Buchungen löschen"
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Löschen
+            </Button>
+            <Button
+              size="sm"
               variant="ghost"
               onClick={clearSelection}
               aria-label="Auswahl aufheben"
@@ -633,6 +693,42 @@ export default function DashboardPage() {
           fetchTransactions()
         }}
       />
+
+      {/* Bulk-Lösch-Bestätigung */}
+      <AlertDialog
+        open={bulkDeleteConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open && !isBulkDeleting) setBulkDeleteConfirmOpen(false)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {selectedIds.size} Buchung{selectedIds.size === 1 ? "" : "en"} wirklich löschen?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Diese Aktion kann nicht rückgängig gemacht werden. Die ausgewählten
+              Buchungen werden dauerhaft entfernt — einschließlich zugeordneter
+              Kategorien und Belege.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>
+              Abbrechen
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void handleBulkDelete()
+              }}
+              disabled={isBulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting ? "Lösche…" : `Alle ${selectedIds.size} löschen`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

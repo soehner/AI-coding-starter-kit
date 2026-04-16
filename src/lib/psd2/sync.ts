@@ -5,6 +5,7 @@ import {
 } from "./enablebanking-client"
 import { berechneMatchingHash, euroZuCent } from "./matching-hash"
 import { sendeConsentRenewalEmail } from "@/lib/psd2-emails"
+import { applyCategorizationRules } from "@/lib/categorization-rules"
 
 /**
  * PROJ-16: Zentrale Abruflogik für die BBBank über Enable Banking (PSD2).
@@ -34,6 +35,14 @@ export interface SyncErgebnis {
   fehlerMeldung?: string
   consentTageVerbleibend?: number
   consentMailGesendet?: boolean
+  /** Anzahl der neu angelegten Umsätze, denen via Kategorisierungsregeln
+   *  mindestens eine Kategorie automatisch zugewiesen wurde. */
+  autoKategorisiert?: number
+  /** Anzahl der erzeugten Kategorie-Zuweisungen insgesamt (ein Umsatz kann
+   *  mehrere Kategorien bekommen, falls mehrere Regeln matchen). */
+  autoZuweisungen?: number
+  /** Warnung aus der Regel-Anwendung — blockiert den Sync nicht. */
+  regelWarnung?: string
 }
 
 export async function fuehreBankAbrufAus(
@@ -152,6 +161,7 @@ export async function fuehreBankAbrufAus(
   let neue = 0
   let aktualisiert = 0
   let fehler = 0
+  const neueTransaktionIds: string[] = []
 
   for (const tx of ebTransaktionen) {
     const umgewandelt = wandleEbTransaktionUm(tx)
@@ -186,24 +196,28 @@ export async function fuehreBankAbrufAus(
       continue
     }
 
-    const { error: insertError } = await client.from("transactions").insert({
-      statement_id: statementId,
-      booking_date: umgewandelt.booking_date,
-      value_date: umgewandelt.value_date,
-      description: umgewandelt.description,
-      counterpart: umgewandelt.counterpart,
-      amount: umgewandelt.amount,
-      // balance_after ist bei PSD2-Einzelumsätzen nicht bekannt.
-      // Wir lassen ihn bewusst auf 0; der Dashboard-Saldo wird seit
-      // Migration 024 über get_current_balance() rekonstruiert.
-      balance_after: 0,
-      matching_hash: hash,
-      quelle: "psd2",
-      status: "nur_psd2",
-      psd2_abgerufen_am: new Date().toISOString(),
-      psd2_original_data: tx as unknown as Record<string, unknown>,
-      iban_gegenseite: umgewandelt.iban_gegenseite,
-    })
+    const { data: eingefuegt, error: insertError } = await client
+      .from("transactions")
+      .insert({
+        statement_id: statementId,
+        booking_date: umgewandelt.booking_date,
+        value_date: umgewandelt.value_date,
+        description: umgewandelt.description,
+        counterpart: umgewandelt.counterpart,
+        amount: umgewandelt.amount,
+        // balance_after ist bei PSD2-Einzelumsätzen nicht bekannt.
+        // Wir lassen ihn bewusst auf 0; der Dashboard-Saldo wird seit
+        // Migration 024 über get_current_balance() rekonstruiert.
+        balance_after: 0,
+        matching_hash: hash,
+        quelle: "psd2",
+        status: "nur_psd2",
+        psd2_abgerufen_am: new Date().toISOString(),
+        psd2_original_data: tx as unknown as Record<string, unknown>,
+        iban_gegenseite: umgewandelt.iban_gegenseite,
+      })
+      .select("id")
+      .single()
 
     if (insertError) {
       if (insertError.code === "23505") {
@@ -215,7 +229,30 @@ export async function fuehreBankAbrufAus(
       }
       continue
     }
+    if (eingefuegt?.id) {
+      neueTransaktionIds.push(eingefuegt.id as string)
+    }
     neue++
+  }
+
+  // Kategorisierungsregeln auf die frisch importierten Umsätze anwenden.
+  // Wie beim PDF-Import darf ein Fehler hier den Sync-Erfolg NICHT kippen.
+  let autoKategorisiert = 0
+  let autoZuweisungen = 0
+  let regelWarnung: string | undefined
+  if (neueTransaktionIds.length > 0) {
+    try {
+      const ergebnis = await applyCategorizationRules(
+        client,
+        neueTransaktionIds
+      )
+      autoKategorisiert = ergebnis.categorized
+      autoZuweisungen = ergebnis.assignmentsCreated
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      console.error("PSD2-Sync: Regel-Anwendung fehlgeschlagen:", detail)
+      regelWarnung = `Regeln konnten nicht angewendet werden: ${detail}`
+    }
   }
 
   await client
@@ -236,6 +273,9 @@ export async function fuehreBankAbrufAus(
     fehler,
     consentTageVerbleibend,
     consentMailGesendet,
+    autoKategorisiert,
+    autoZuweisungen,
+    regelWarnung,
   }
 }
 
