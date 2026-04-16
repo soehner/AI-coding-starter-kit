@@ -29,7 +29,7 @@
 | PROJ-13 | Automatische Kategorisierungsregeln | Deployed | [PROJ-13-kategorisierungsregeln.md](PROJ-13-kategorisierungsregeln.md) | 2026-04-12 |
 | PROJ-14 | Kategoriebasierter Zugriff für Betrachter | Deployed | [PROJ-14-kategoriebasierter-zugriff.md](PROJ-14-kategoriebasierter-zugriff.md) | 2026-04-12 |
 | PROJ-15 | Zusammengesetzte Kategorisierungsregeln (UND/ODER) | Deployed | [PROJ-15-zusammengesetzte-regeln.md](PROJ-15-zusammengesetzte-regeln.md) | 2026-04-12 |
-| PROJ-16 | Direkter Bankabruf (PSD2) mit PDF-Abgleich | In Review | [PROJ-16-psd2-bankabruf.md](PROJ-16-psd2-bankabruf.md) | 2026-04-13 |
+| PROJ-16 | Direkter Bankabruf (PSD2) mit PDF-Abgleich | Deployed | [PROJ-16-psd2-bankabruf.md](PROJ-16-psd2-bankabruf.md) | 2026-04-13 |
 
 <!-- Add features above this line -->
 

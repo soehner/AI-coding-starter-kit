@@ -1,8 +1,9 @@
 # PROJ-16: Direkter Bankabruf (PSD2) mit PDF-Abgleich
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-04-13
-**Zuletzt aktualisiert:** 2026-04-13
+**Zuletzt aktualisiert:** 2026-04-16
+**Live seit:** 2026-04-16 — End-to-End-Test gegen echte BBBank-Production erfolgreich, Kontoauszüge werden geladen, Kontostand plausibel.
 
 ## Abhängigkeiten
 - Benötigt: PROJ-1 (Authentifizierung) — Admin-Rolle für Bankzugang-Konfiguration
