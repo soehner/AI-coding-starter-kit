@@ -385,8 +385,8 @@ export function TransactionTable({
                         {formatDate(t.booking_date)}
                       </TableCell>
 
-                      {/* Buchungstext - editierbar */}
-                      <TableCell className="max-w-[180px] text-xs md:max-w-[220px] md:text-sm [&_.line-clamp-1]:line-clamp-2">
+                      {/* Buchungstext - editierbar, mehrzeilig umgebrochen */}
+                      <TableCell className="max-w-[180px] align-top text-xs md:max-w-[240px] md:text-sm">
                         <InlineEditField
                           value={t.description}
                           onSave={(val) => handleFieldSave(t.id, "description", val)}
@@ -395,6 +395,7 @@ export function TransactionTable({
                           required
                           label="Buchungstext"
                           placeholder="Buchungstext eingeben"
+                          wrapText
                         />
                       </TableCell>
 

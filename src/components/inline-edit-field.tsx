@@ -17,6 +17,10 @@ interface InlineEditFieldProps {
   className?: string
   /** Wird als aria-label für das Eingabefeld verwendet */
   label: string
+  /** Wenn true, wird der Anzeige-Text mehrzeilig umgebrochen statt
+   *  mit Ellipsis auf eine Zeile zu kürzen. Nützlich für lange
+   *  Buchungstexte in Tabellenzellen mit begrenzter Breite. */
+  wrapText?: boolean
 }
 
 export function InlineEditField({
@@ -29,6 +33,7 @@ export function InlineEditField({
   placeholder = "-",
   className,
   label,
+  wrapText = false,
 }: InlineEditFieldProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(value)
@@ -126,7 +131,8 @@ export function InlineEditField({
     return (
       <span
         className={cn(
-          "block truncate text-sm",
+          "block text-sm",
+          wrapText ? "whitespace-normal break-words" : "truncate",
           !value && "text-muted-foreground",
           className
         )}
@@ -218,16 +224,27 @@ export function InlineEditField({
       type="button"
       onClick={() => setIsEditing(true)}
       className={cn(
-        "group flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-sm transition-colors hover:bg-muted/50",
+        "group flex w-full gap-1 rounded px-1 py-0.5 text-left text-sm transition-colors hover:bg-muted/50",
+        wrapText ? "items-start" : "items-center",
         !value && "text-muted-foreground",
         className
       )}
       title={`${value || placeholder} — Klicken zum Bearbeiten`}
       aria-label={`${label} bearbeiten: ${value || "leer"}`}
     >
-      <span className="flex-1 truncate">{value || placeholder}</span>
+      <span
+        className={cn(
+          "flex-1",
+          wrapText ? "whitespace-normal break-words" : "truncate"
+        )}
+      >
+        {value || placeholder}
+      </span>
       <Pencil
-        className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+        className={cn(
+          "h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100",
+          wrapText && "mt-1"
+        )}
         aria-hidden="true"
       />
     </button>
