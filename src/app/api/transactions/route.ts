@@ -381,6 +381,29 @@ export async function GET(request: Request) {
     const { data, count, error } = await query
 
     if (error) {
+      // PostgREST-Code "PGRST103" / HTTP 416: Seite existiert nicht
+      // (typischerweise nach Löschungen, wenn der Client noch eine
+      // zu hohe Seitenzahl anfragt). Statt Fehler → leere Seite
+      // zurückgeben, damit der Client auf Seite 1 zurückspringen kann.
+      const isRangeError =
+        error.code === "PGRST103" ||
+        /range not satisfiable/i.test(error.message)
+      if (isRangeError) {
+        // Gesamt-Anzahl separat nachschlagen, damit der Client weiss,
+        // wohin er gültig springen kann.
+        const { count: gesamtCount } = await supabase
+          .from("transactions")
+          .select("id", { count: "exact", head: true })
+        const total = gesamtCount || 0
+        return NextResponse.json({
+          transactions: [],
+          total,
+          page,
+          pageSize: PAGE_SIZE,
+          totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+          outOfRange: true,
+        })
+      }
       return NextResponse.json(
         { error: "Fehler beim Laden der Buchungen: " + error.message },
         { status: 500 }

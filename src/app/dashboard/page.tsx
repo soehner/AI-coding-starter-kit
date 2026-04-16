@@ -249,6 +249,13 @@ export default function DashboardPage() {
         throw new Error(data.error || "Fehler beim Laden der Buchungen")
       }
       const data = await res.json()
+      // Seite existiert nicht mehr (z. B. nach Löschen) → auf die letzte
+      // gültige Seite zurückspringen, damit der Benutzer den Tabelleninhalt
+      // weiterhin sieht.
+      if (data.outOfRange && data.totalPages > 0 && page > data.totalPages) {
+        setPage(data.totalPages)
+        return
+      }
       setTransactions(data.transactions)
       setTotalPages(data.totalPages)
     } catch (err) {
