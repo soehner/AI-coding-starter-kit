@@ -13,10 +13,11 @@ import { BulkKategorisierungDialog } from "@/components/bulk-kategorisierung-dia
 import { EingeschraenkteBetrachterBanner } from "@/components/eingeschraenkte-betrachter-banner"
 import { Psd2ConsentBanner } from "@/components/psd2-consent-banner"
 import { TransactionAbgleichDialog } from "@/components/transaction-abgleich-dialog"
+import { ManuellerAbgleichDialog } from "@/components/manueller-abgleich-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Tags, Trash2, X } from "lucide-react"
+import { AlertCircle, Link2, Tags, Trash2, X } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,6 +84,9 @@ export default function DashboardPage() {
     useState<Transaction | null>(null)
   const [abgleichDialogOpen, setAbgleichDialogOpen] = useState(false)
 
+  // Manueller Abgleich (zwei selbst ausgewählte Buchungen zusammenführen)
+  const [manuellerAbgleichOpen, setManuellerAbgleichOpen] = useState(false)
+
   // Daten-State
   const [summary, setSummary] = useState<TransactionSummary | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -91,6 +95,15 @@ export default function DashboardPage() {
   const [tableLoading, setTableLoading] = useState(true)
   const [summaryError, setSummaryError] = useState<string | null>(null)
   const [tableError, setTableError] = useState<string | null>(null)
+
+  // Aktuell sichtbare ausgewählte Buchungen (nur Einträge der aktuellen Seite —
+  // Mehrseiten-Auswahl wird vom manuellen Abgleich nicht unterstützt, da der
+  // Dialog beide Einträge nebeneinander anzeigen muss).
+  const visibleSelectedTransactions = transactions.filter((t) =>
+    selectedIds.has(t.id)
+  )
+  const canManuellAbgleichen =
+    selectedIds.size === 2 && visibleSelectedTransactions.length === 2
 
   // URL-Parameter synchronisieren
   const updateUrl = useCallback(
@@ -618,6 +631,17 @@ export default function DashboardPage() {
             {selectedIds.size} Buchung{selectedIds.size === 1 ? "" : "en"} ausgewählt
           </span>
           <div className="ml-auto flex flex-wrap gap-2">
+            {canManuellAbgleichen && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setManuellerAbgleichOpen(true)}
+                aria-label="Ausgewählte Buchungen als identisch abgleichen"
+              >
+                <Link2 className="mr-1.5 h-4 w-4" />
+                Als identisch abgleichen
+              </Button>
+            )}
             <Button size="sm" onClick={() => setBulkDialogOpen(true)}>
               <Tags className="mr-1.5 h-4 w-4" />
               Kategorie zuweisen
@@ -683,6 +707,18 @@ export default function DashboardPage() {
         transaction={abgleichTransaction}
         allTransactions={transactions}
         onDecided={() => {
+          fetchTransactions()
+          fetchSummary()
+        }}
+      />
+
+      {/* Manueller Abgleich: zwei selbst ausgewählte Buchungen zusammenführen */}
+      <ManuellerAbgleichDialog
+        open={manuellerAbgleichOpen}
+        onOpenChange={setManuellerAbgleichOpen}
+        transactions={visibleSelectedTransactions}
+        onDecided={() => {
+          clearSelection()
           fetchTransactions()
           fetchSummary()
         }}
