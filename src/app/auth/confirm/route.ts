@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { createServerClient } from "@supabase/ssr"
 import type { EmailOtpType } from "@supabase/supabase-js"
-import { createServerSupabaseClient } from "@/lib/supabase-server"
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -15,7 +15,32 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const supabase = await createServerSupabaseClient()
+  // Response vorab anlegen, damit der Supabase-Client die Session-Cookies
+  // direkt auf die Redirect-Response schreiben kann. Sonst würden die Cookies
+  // nur im cookieStore landen und bei NextResponse.redirect() verlorengehen.
+  let response = NextResponse.redirect(`${origin}${next}`)
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          )
+          response = NextResponse.redirect(`${origin}${next}`)
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
+
   const { error } = await supabase.auth.verifyOtp({
     type,
     token_hash: tokenHash,
@@ -29,5 +54,5 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  return NextResponse.redirect(`${origin}${next}`)
+  return response
 }
