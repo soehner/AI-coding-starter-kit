@@ -177,11 +177,16 @@ export async function fuehreBankAbrufAus(
       verwendungszweck: umgewandelt.description,
     })
 
-    // Prüfen, ob Hash schon existiert (verhindert Duplikate)
+    // Prüfen, ob Hash schon existiert (verhindert Duplikate).
+    // Auch matching_hash_psd2 prüfen — dort liegt der originale PSD2-Hash
+    // bei Einträgen, die bereits mit einem PDF-Eintrag gemerged wurden
+    // (Migration 026). Ohne diese zweite Spalte würde jeder erneute Sync
+    // ein Duplikat anlegen, weil der bestätigte Eintrag den PDF-Hash trägt.
     const { data: vorhandene } = await client
       .from("transactions")
       .select("id")
-      .eq("matching_hash", hash)
+      .or(`matching_hash.eq.${hash},matching_hash_psd2.eq.${hash}`)
+      .limit(1)
       .maybeSingle()
 
     if (vorhandene) {
@@ -279,7 +284,7 @@ export async function fuehreBankAbrufAus(
   }
 }
 
-interface UmgewandelteTransaktion {
+export interface UmgewandelteTransaktion {
   booking_date: string
   value_date: string
   description: string
@@ -297,7 +302,7 @@ interface UmgewandelteTransaktion {
  * - Gegenseite-IBAN: bei CRDT der `debtor_account.iban`, bei DBIT der
  *    `creditor_account.iban`.
  */
-function wandleEbTransaktionUm(
+export function wandleEbTransaktionUm(
   tx: EbTransaction
 ): UmgewandelteTransaktion | null {
   const buchungsdatum = tx.booking_date ?? tx.value_date ?? tx.transaction_date

@@ -126,6 +126,9 @@ export async function POST(request: Request) {
 
       if (ergebnis.aktion === "bestaetigt" && ergebnis.kandidat) {
         // Exakter Hash-Match mit existierendem PSD2-Eintrag → mergen.
+        // matching_hash_psd2 spiegelt den Kandidaten-Hash; bei exaktem Match
+        // ist er identisch zum neuen PDF-Hash, aber wir setzen ihn konsistent,
+        // damit jeder gemergde Eintrag eine PSD2-Hash-Spur trägt.
         const { error: updErr } = await adminClient
           .from("transactions")
           .update({
@@ -141,6 +144,7 @@ export async function POST(request: Request) {
             quelle: "beide",
             status: "bestaetigt",
             matching_hash: ergebnis.hash,
+            matching_hash_psd2: ergebnis.kandidat.matching_hash,
           })
           .eq("id", ergebnis.kandidat.id)
         if (updErr) throw new Error(updErr.message)
@@ -150,7 +154,9 @@ export async function POST(request: Request) {
       }
 
       if (ergebnis.aktion === "konflikt" && ergebnis.kandidat) {
-        // Betrag weicht ab → PDF gewinnt, alten PSD2-Wert sichern
+        // Betrag weicht ab → PDF gewinnt, alten PSD2-Wert sichern.
+        // Den ursprünglichen PSD2-Hash nach matching_hash_psd2 retten, damit
+        // ein erneuter PSD2-Sync den Vorgang nicht als Duplikat anlegt.
         const { data: alterEintrag } = await adminClient
           .from("transactions")
           .select("amount, booking_date, description, counterpart, psd2_original_data")
@@ -176,6 +182,7 @@ export async function POST(request: Request) {
               iban_gegenseite: ibanGegenseite,
               verwendungszweck: tx.description,
             }),
+            matching_hash_psd2: ergebnis.kandidat.matching_hash,
             psd2_original_data: alterEintrag ?? null,
           })
           .eq("id", ergebnis.kandidat.id)

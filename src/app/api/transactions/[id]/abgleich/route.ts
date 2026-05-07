@@ -53,7 +53,7 @@ export async function POST(
   // Beide Eintraege laden
   const { data: eintraege, error: loadError } = await adminClient
     .from("transactions")
-    .select("id, quelle, status, matching_hash, nicht_matchen_mit, psd2_original_data, psd2_abgerufen_am")
+    .select("id, quelle, status, matching_hash, matching_hash_psd2, nicht_matchen_mit, psd2_original_data, psd2_abgerufen_am")
     .in("id", [id, partner_id])
 
   if (loadError || !eintraege || eintraege.length !== 2) {
@@ -78,6 +78,9 @@ export async function POST(
       )
     }
 
+    // Den PSD2-Hash zusätzlich am bestätigten Eintrag persistieren, damit
+    // ein erneuter PSD2-Sync den Vorgang nicht als Duplikat anlegt
+    // (siehe Migration 026 / sync.ts Duplikat-Check).
     const { error: updateError } = await adminClient
       .from("transactions")
       .update({
@@ -85,6 +88,7 @@ export async function POST(
         status: "bestaetigt",
         psd2_abgerufen_am: psd2.psd2_abgerufen_am,
         psd2_original_data: psd2.psd2_original_data,
+        matching_hash_psd2: psd2.matching_hash,
       })
       .eq("id", pdf.id)
 
