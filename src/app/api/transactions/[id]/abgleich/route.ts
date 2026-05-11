@@ -64,6 +64,40 @@ export async function POST(
   }
 
   if (entscheidung === "bestaetigt") {
+    // Sonderfall: ein bereits abgeglichener Eintrag (quelle='beide') + ein
+    // PSD2-Duplikat. Solche Altlasten sind entstanden, bevor der PSD2-Hash
+    // beim Merge persistiert wurde (Fix 71d146c / Migration 026). Erkennung:
+    // matching_hash des PSD2-Eintrags == matching_hash_psd2 des bestaetigten.
+    // In dem Fall den bestaetigten Eintrag unangetastet lassen und nur das
+    // Duplikat loeschen.
+    const bestaetigt = eintraege.find((e) => e.quelle === "beide")
+    const psd2Duplikat = eintraege.find((e) => e.quelle === "psd2")
+    if (
+      bestaetigt &&
+      psd2Duplikat &&
+      bestaetigt.matching_hash_psd2 &&
+      psd2Duplikat.matching_hash &&
+      bestaetigt.matching_hash_psd2 === psd2Duplikat.matching_hash
+    ) {
+      const { error: deleteError } = await adminClient
+        .from("transactions")
+        .delete()
+        .eq("id", psd2Duplikat.id)
+
+      if (deleteError) {
+        return NextResponse.json(
+          {
+            error: `PSD2-Duplikat konnte nicht geloescht werden: ${deleteError.message}`,
+          },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        message: "PSD2-Duplikat erfolgreich entfernt.",
+      })
+    }
+
     // Merge: PDF-Eintrag wird primaer (Source of Truth), PSD2-Eintrag wird geloescht
     const pdf = eintraege.find((e) => e.quelle === "pdf")
     const psd2 = eintraege.find((e) => e.quelle === "psd2")

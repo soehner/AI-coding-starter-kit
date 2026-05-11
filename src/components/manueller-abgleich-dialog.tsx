@@ -40,8 +40,32 @@ function formatDate(dateStr: string): string {
 }
 
 type ValidationResult =
-  | { ok: true; pdf: Transaction; psd2: Transaction }
+  | { ok: true; mode: "merge"; pdf: Transaction; psd2: Transaction }
+  | {
+      ok: true
+      mode: "duplicate"
+      /** Der bereits abgeglichene Eintrag, der erhalten bleibt. */
+      bestaetigt: Transaction
+      /** Der PSD2-Duplikat-Eintrag, der gelöscht wird. */
+      duplikat: Transaction
+    }
   | { ok: false; reason: string }
+
+/**
+ * Erkennt, ob ein PSD2-Eintrag ein Duplikat eines bereits abgeglichenen
+ * Eintrags ist (entstanden vor dem Fix 71d146c, als der PSD2-Hash beim
+ * Merge nicht persistiert wurde). Kriterium: der `matching_hash` des
+ * PSD2-Eintrags entspricht dem `matching_hash_psd2` des bestätigten.
+ */
+function istDuplikatVonBestaetigtem(
+  bestaetigt: Transaction,
+  psd2: Transaction
+): boolean {
+  if (bestaetigt.quelle !== "beide") return false
+  if (psd2.quelle !== "psd2") return false
+  if (!bestaetigt.matching_hash_psd2 || !psd2.matching_hash) return false
+  return bestaetigt.matching_hash_psd2 === psd2.matching_hash
+}
 
 function validateSelection(transactions: Transaction[]): ValidationResult {
   if (transactions.length !== 2) {
@@ -57,7 +81,16 @@ function validateSelection(transactions: Transaction[]): ValidationResult {
     return { ok: false, reason: "Es muss sich um zwei verschiedene Buchungen handeln." }
   }
 
-  // Bereits zusammengeführte / bestätigte Einträge können nicht erneut abgeglichen werden
+  // Sonderfall: ein bereits abgeglichener Eintrag + sein PSD2-Duplikat
+  // (Alt-Bestand vor dem Hash-Persistier-Fix). Wir erlauben hier, das
+  // Duplikat zu entfernen, ohne den bestätigten Eintrag anzufassen.
+  const bestaetigt = transactions.find((t) => t.quelle === "beide")
+  const psd2Kandidat = transactions.find((t) => t.quelle === "psd2")
+  if (bestaetigt && psd2Kandidat && istDuplikatVonBestaetigtem(bestaetigt, psd2Kandidat)) {
+    return { ok: true, mode: "duplicate", bestaetigt, duplikat: psd2Kandidat }
+  }
+
+  // Bereits zusammengeführte / bestätigte Einträge können sonst nicht erneut abgeglichen werden
   for (const t of transactions) {
     if (t.quelle === "beide" || t.status === "bestaetigt") {
       return {
@@ -95,7 +128,7 @@ function validateSelection(transactions: Transaction[]): ValidationResult {
     }
   }
 
-  return { ok: true, pdf, psd2 }
+  return { ok: true, mode: "merge", pdf, psd2 }
 }
 
 export function ManuellerAbgleichDialog({
@@ -119,14 +152,21 @@ export function ManuellerAbgleichDialog({
     setError(null)
 
     try {
+      const primaryId =
+        validation.mode === "merge" ? validation.pdf.id : validation.bestaetigt.id
+      const partnerId =
+        validation.mode === "merge"
+          ? validation.psd2.id
+          : validation.duplikat.id
+
       const res = await fetch(
-        `/api/transactions/${validation.pdf.id}/abgleich`,
+        `/api/transactions/${primaryId}/abgleich`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             entscheidung: "bestaetigt",
-            partner_id: validation.psd2.id,
+            partner_id: partnerId,
           }),
         }
       )
@@ -138,7 +178,11 @@ export function ManuellerAbgleichDialog({
         )
       }
 
-      toast.success("Buchungen erfolgreich zusammengeführt.")
+      toast.success(
+        validation.mode === "duplicate"
+          ? "Duplikat erfolgreich entfernt."
+          : "Buchungen erfolgreich zusammengeführt."
+      )
       onDecided()
       onOpenChange(false)
     } catch (err) {
@@ -148,8 +192,17 @@ export function ManuellerAbgleichDialog({
     }
   }, [validation, onDecided, onOpenChange])
 
-  const pdf = validation.ok ? validation.pdf : null
-  const psd2 = validation.ok ? validation.psd2 : null
+  const isDuplicateMode = validation.ok && validation.mode === "duplicate"
+  const mergePdf =
+    validation.ok && validation.mode === "merge" ? validation.pdf : null
+  const mergePsd2 =
+    validation.ok && validation.mode === "merge" ? validation.psd2 : null
+  const dupBestaetigt =
+    validation.ok && validation.mode === "duplicate"
+      ? validation.bestaetigt
+      : null
+  const dupDuplikat =
+    validation.ok && validation.mode === "duplicate" ? validation.duplikat : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -157,13 +210,14 @@ export function ManuellerAbgleichDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Link2 className="h-5 w-5 text-primary" />
-            Buchungen manuell abgleichen
+            {isDuplicateMode
+              ? "PSD2-Duplikat entfernen"
+              : "Buchungen manuell abgleichen"}
           </DialogTitle>
           <DialogDescription>
-            Du hast zwei Buchungen ausgewählt, die du als denselben Umsatz
-            bestätigen möchtest. Der PDF-Eintrag bleibt als verbindliche Quelle
-            erhalten, der PSD2-Eintrag wird mit ihm zusammengeführt und
-            anschließend gelöscht.
+            {isDuplicateMode
+              ? "Eine der ausgewählten Buchungen ist bereits abgeglichen — die andere ist ein PSD2-Duplikat (gleicher Hash), das entstand, bevor PSD2-Hashes beim Merge persistiert wurden. Der bestätigte Eintrag bleibt unverändert; das Duplikat wird gelöscht."
+              : "Du hast zwei Buchungen ausgewählt, die du als denselben Umsatz bestätigen möchtest. Der PDF-Eintrag bleibt als verbindliche Quelle erhalten, der PSD2-Eintrag wird mit ihm zusammengeführt und anschließend gelöscht."}
           </DialogDescription>
         </DialogHeader>
 
@@ -181,17 +235,32 @@ export function ManuellerAbgleichDialog({
           </Alert>
         )}
 
-        {validation.ok && pdf && psd2 && (
+        {mergePdf && mergePsd2 && (
           <div className="grid gap-4 md:grid-cols-2">
             <EintragCard
               titel="PDF-Eintrag (bleibt erhalten)"
               badgeColor="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
-              transaction={pdf}
+              transaction={mergePdf}
             />
             <EintragCard
               titel="PSD2-Eintrag (wird zusammengeführt)"
               badgeColor="bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300"
-              transaction={psd2}
+              transaction={mergePsd2}
+            />
+          </div>
+        )}
+
+        {dupBestaetigt && dupDuplikat && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <EintragCard
+              titel="Bestätigter Eintrag (bleibt erhalten)"
+              badgeColor="bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300"
+              transaction={dupBestaetigt}
+            />
+            <EintragCard
+              titel="PSD2-Duplikat (wird gelöscht)"
+              badgeColor="bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
+              transaction={dupDuplikat}
             />
           </div>
         )}
@@ -207,7 +276,13 @@ export function ManuellerAbgleichDialog({
           {validation.ok && (
             <Button onClick={handleConfirm} disabled={isSubmitting}>
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              {isSubmitting ? "Wird zusammengeführt…" : "Als identisch bestätigen"}
+              {isSubmitting
+                ? isDuplicateMode
+                  ? "Duplikat wird entfernt…"
+                  : "Wird zusammengeführt…"
+                : isDuplicateMode
+                ? "Duplikat entfernen"
+                : "Als identisch bestätigen"}
             </Button>
           )}
         </DialogFooter>

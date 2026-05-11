@@ -181,6 +181,14 @@ export interface Transaction {
   categories: Category[]
   // PROJ-16: Herkunfts- und Abgleichs-Felder
   matching_hash?: string | null
+  /**
+   * Zweiter Hash-Slot für Einträge, die mit einem PSD2-Eintrag gemerged
+   * wurden (quelle='beide'): hier wird der ursprüngliche PSD2-Hash
+   * persistiert, damit ein erneuter PSD2-Sync den Vorgang nicht als
+   * Duplikat anlegt (Migration 026 / Fix 71d146c). Wird auch zur
+   * Erkennung von Alt-Duplikaten im manuellen Abgleich genutzt.
+   */
+  matching_hash_psd2?: string | null
   quelle?: "psd2" | "pdf" | "beide"
   status?: "nur_psd2" | "nur_pdf" | "bestaetigt" | "vorschlag" | "konflikt"
   psd2_abgerufen_am?: string | null

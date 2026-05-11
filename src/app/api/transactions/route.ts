@@ -313,6 +313,7 @@ export async function GET(request: Request) {
         updated_by,
         statement_id,
         matching_hash,
+        matching_hash_psd2,
         quelle,
         status,
         psd2_abgerufen_am,
