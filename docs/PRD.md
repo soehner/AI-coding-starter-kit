@@ -36,6 +36,7 @@
 | P2 | PROJ-13: Automatische Kategorisierungsregeln | Planned |
 | P2 | PROJ-14: Kategoriebasierter Zugriff für Betrachter | Planned |
 | P1 | PROJ-16: Direkter Bankabruf (PSD2) mit PDF-Abgleich | Planned |
+| P1 | PROJ-17: Spendenquittung (Zuwendungsbestätigung) | Planned |
 
 ## Success Metrics
 - Zeiteinsparung: Manuelles Übertragen entfällt (aktuell ~30 Min pro Kontoauszug)
