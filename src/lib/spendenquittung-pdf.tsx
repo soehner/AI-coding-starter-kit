@@ -139,28 +139,13 @@ function formatBetrag(betrag: number): string {
 }
 
 /**
- * Normalisiert den Förderzweck so, dass er nach „Förderung " syntaktisch
- * korrekt anschließt. Falls der Zweck z. B. mit Großbuchstabe beginnt
- * oder mit „der/die/das" anfangen sollte, wird er unverändert übernommen –
- * die Verantwortung für die korrekte Formulierung liegt beim Kassenwart.
- */
-function foerderzweck(zweck: string): string {
-  return zweck.trim()
-}
-
-/**
  * Liefert den Freistellungs-Pflichthinweis nach BMF-Muster.
- * Nutzt den per Quittung übergebenen Förderzweck (kann sich vom
- * dauerhaften Satzungszweck in den Einstellungen unterscheiden).
  */
-function freistellungsHinweis(
-  verein: VereinSnapshot,
-  zweck: string
-): string {
+function freistellungsHinweis(verein: VereinSnapshot): string {
   const datum = formatDateDe(verein.freistellungsbescheid_datum)
   return (
-    `Wir sind wegen Förderung ${foerderzweck(zweck)} nach dem ` +
-    `Freistellungsbescheid des Finanzamts ${verein.finanzamt}, ` +
+    `Wir sind gemäß Vereinszweck und gemäß des Freistellungsbescheids ` +
+    `des Finanzamts ${verein.finanzamt}, ` +
     `Steuer-Nr. ${verein.steuernummer}, vom ${datum} für den letzten ` +
     `Veranlagungszeitraum ${verein.letzter_veranlagungszeitraum} nach ` +
     `§ 5 Abs. 1 Nr. 9 des Körperschaftsteuergesetzes von der ` +
@@ -263,13 +248,13 @@ export async function rendereSpendenquittungPdf(
 
         {/* Freistellungs-Bescheinigung */}
         <Text style={styles.textBlock}>
-          {freistellungsHinweis(data.verein, data.zweck)}
+          {freistellungsHinweis(data.verein)}
         </Text>
 
         {/* Verwendungszweck */}
         <Text style={styles.textBlock}>
-          Es wird bestätigt, dass die Zuwendung nur zur Förderung{" "}
-          {foerderzweck(data.zweck)} verwendet wird.
+          Es wird bestätigt, dass die Zuwendung nur zur Förderung des
+          Vereins im Sinne des Vereinszweckes verwendet wird.
         </Text>
 
         {/* Unterschrift – elektronisch ausgestellt, daher „gez." statt Signatur */}
