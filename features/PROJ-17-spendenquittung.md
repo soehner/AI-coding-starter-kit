@@ -200,7 +200,179 @@ Felder: `verein_name`, `adresse_zeile1`, `adresse_zeile2`, `plz`, `ort`, `steuer
 ---
 
 ## Technisches Design (Solution Architect)
-_Wird von /architecture hinzugefügt_
+
+### Überblick
+
+Das Feature besteht aus vier Bausteinen, die aufeinander aufbauen:
+
+```
+① Organisationseinstellungen  →  ② Spender-Datenbank
+         ↓                              ↓
+         └──────────→  ③ Quittungs-Erstellung  ←──────── Buchung
+                               ↓
+                       ④ Quittungs-Historie
+```
+
+Die Buchung liefert Betrag, Datum und Gegenpartei. Die Organisationseinstellungen liefern die Vereinsdaten. Zusammen ergibt das eine vollständige, amtlich konforme Quittung.
+
+---
+
+### A) Komponentenstruktur (UI-Baum)
+
+```
+Dashboard
+│
+├── Einstellungen (bestehend: /dashboard/einstellungen)
+│   └── Neuer Tab „Organisation"
+│       └── organisation-einstellungen-form  [NEU]
+│           (Vereinsname, Adresse, Steuernr., Finanzamt,
+│            Freistellungsbescheid, Unterzeichner)
+│
+├── Transaktions-Dashboard (bestehend)
+│   └── transaction-table (bestehend)
+│       └── Kontextmenü ← neuer Eintrag „Spendenquittung erstellen"
+│                          (nur sichtbar bei amount > 0, nur für Admins)
+│
+├── Spendenquittungen [NEU: /dashboard/spendenquittungen]
+│   ├── Filter-Leiste (Jahr, Spendername, Versandstatus)
+│   └── spendenquittungen-tabelle  [NEU]
+│       (Nr., Spendername, Betrag, Datum, E-Mail-Status, Buchungs-Link)
+│       └── Zeilen-Aktionen: PDF herunterladen | E-Mail erneut senden
+│
+└── Dialoge (werden von transaction-table geöffnet)
+    │
+    ├── spendenquittung-erstellen-dialog  [NEU]
+    │   ├── Schritt 1 – Spender
+    │   │   └── spender-auswahl-combobox  [NEU]
+    │   │       (Suche in Datenbank, Vorschlag basierend auf
+    │   │        counterpart-Name, „Neuen Spender anlegen"-Option)
+    │   ├── Schritt 2 – Quittungsdaten
+    │   │   (Betrag/Datum vorausgefüllt, Zweck editierbar,
+    │   │    Ausstellungsdatum heute, Pflichtfelder markiert)
+    │   └── Schritt 3 – Vorschau & Abschluss
+    │       ├── PDF-Vorschau (eingebettetes iFrame)
+    │       ├── [PDF herunterladen]-Button
+    │       └── [Per E-Mail senden]-Bereich
+    │           (Empfänger-Adresse, Betreff und Text vorausgefüllt,
+    │            editierbar)
+    │
+    └── spender-bearbeiten-dialog  [NEU]
+        (Name, Straße, PLZ, Ort, E-Mail – separat aufrufbar aus Historie)
+```
+
+---
+
+### B) Datenhaltung
+
+**Drei neue Datenbankstrukturen:**
+
+**1. Organisationseinstellungen**
+Kein neues Schema nötig – die bestehende `app_settings`-Tabelle (Key-Value-Speicher) wird um ~12 neue Schlüssel erweitert. Beispiele: `org_verein_name`, `org_steuernummer`, `org_freistellungsbescheid_datum` usw.
+→ Vorteil: Passt nahtlos ins bestehende Settings-System; keine neue Migration für eine eigene Tabelle.
+
+**2. Spender-Datenbank (neue Tabelle `spender`)**
+Speichert wiederverwendbare Spenderdaten: Name, Adresse (Straße, PLZ, Ort), E-Mail, IBAN. Die IBAN wird beim ersten Erstellen aus der Buchung übernommen und dient als Erkennungsmerkmal für zukünftige Buchungen desselben Spenders.
+
+**3. Quittungs-Archiv (neue Tabelle `spendenquittungen`)**
+Jede ausgestellte Quittung wird unveränderlich gespeichert. Enthält:
+- Referenz zur Buchung (nullable – für den Fall, dass die Buchung gelöscht wird)
+- Referenz zum Spender
+- Betrag, Daten (Spende + Ausstellung)
+- `verein_snapshot` (JSON-Abbild der Vereinsdaten zum Ausstellungszeitpunkt – so bleibt die Quittung korrekt, auch wenn die Einstellungen später geändert werden)
+- Pfad zur PDF-Datei in Supabase Storage
+- E-Mail-Versandstatus (Zeitstempel + Empfänger-Adresse)
+- Quittungs-Nummer (`SQ-JJJJ-NNNN`)
+
+**Supabase Storage:**
+Neuer privater Bucket `spendenquittungen` – Zugriff nur für eingeloggte Admins über signierte URLs (zeitlich begrenzt, kein öffentlicher Zugriff).
+
+---
+
+### C) API-Routen (neue Endpunkte)
+
+```
+/api/admin/spendenquittungen/
+   GET   → Liste aller Quittungen (mit Filterung)
+   POST  → Quittung erstellen + PDF generieren + in Storage ablegen
+
+/api/admin/spendenquittungen/[id]/
+   GET   → Einzelne Quittung inkl. signierter PDF-Download-URL
+
+/api/admin/spendenquittungen/[id]/email/
+   POST  → Quittung per E-Mail (erneut) versenden
+
+/api/admin/spender/
+   GET   → Spenderliste (mit Volltextsuche)
+   POST  → Neuen Spender anlegen
+
+/api/admin/spender/[id]/
+   PATCH  → Spenderdaten bearbeiten
+   DELETE → Spender löschen (DSGVO-Recht auf Vergessenwerden)
+
+/api/admin/settings (bestehend)
+   → Wird um Organisations-Keys erweitert (kein neuer Endpunkt nötig)
+```
+
+---
+
+### D) PDF-Generierung: Technische Entscheidung
+
+**Gewählte Bibliothek: `@react-pdf/renderer`**
+
+| Option | Bewertung |
+|--------|-----------|
+| `@react-pdf/renderer` | ✅ Serverseitig in Next.js App Router nutzbar, kein Browser nötig, gute Umlaut-Unterstützung, schlankes Bundle (~500 KB) |
+| `puppeteer` / `playwright` | ❌ Headless Browser zu groß für Vercel (>50 MB), langsam, komplexes Setup |
+| `pdfkit` | ⚠️ Low-Level, viel manuelles Layout, kein React-Rendering |
+
+`@react-pdf/renderer` erlaubt es, das amtliche BMF-Muster als React-Komponente zu definieren – mit fixen Texten, die rechtlich nicht veränderbar sind, und variablen Platzhaltern für die Pflichtfelder. Das PDF wird serverseitig in der API-Route erzeugt, nie im Browser.
+
+**Betrag in Worten:** Eigene, kleine Hilfsfunktion in `src/lib/betrag-in-worten.ts` – keine externe Bibliothek nötig, da nur EUR-Beträge im deutschen Format benötigt werden.
+
+---
+
+### E) E-Mail-Versand
+
+Verwendet das bestehende **Resend**-Setup (wie PROJ-2 Einladungen, PROJ-10 Genehmigungen). Das PDF wird als Base64-kodierter Anhang mitgeschickt. Betreff und Text sind vorausgefüllt, aber im Dialog editierbar. Der Versand läuft in der API-Route synchron, da Resend sehr schnell antwortet (<500 ms).
+
+---
+
+### F) Spender-Erkennung (Fuzzy-Match)
+
+Beim Öffnen des Erstellungs-Dialogs wird der `counterpart`-Name der Buchung serverseitig mit allen gespeicherten Spendern verglichen. Verwendet **PostgreSQL `similarity()`** (pg_trgm-Extension), die in Supabase bereits aktiviert ist. Ähnlichkeit ≥ 0,4 → Vorschlag anzeigen. Der Benutzer wählt den richtigen Spender aus oder legt einen neuen an.
+
+---
+
+### G) Zugriffssteuerung (RLS)
+
+| Tabelle | Lesen | Schreiben/Löschen |
+|---------|-------|-------------------|
+| `spender` | Admin | Admin |
+| `spendenquittungen` | Admin + Betrachter (Lesezugriff) | Nur Admin |
+| Storage `spendenquittungen` | Nur Admin (signierte URLs) | Nur Admin |
+| `app_settings` (org_*) | Admin | Admin |
+
+---
+
+### H) Abhängigkeiten (neue Pakete)
+
+| Paket | Zweck |
+|-------|-------|
+| `@react-pdf/renderer` | Serverseitige PDF-Generierung im amtlichen BMF-Layout |
+
+Alle anderen benötigten Bausteine (Resend, Supabase, shadcn/ui, Zod, react-hook-form) sind bereits installiert.
+
+---
+
+### I) Umsetzungsreihenfolge
+
+1. **Datenbank** – Migrationen für `spender`, `spendenquittungen`, Supabase Storage Bucket, RLS-Policies
+2. **Organisationseinstellungen** – Settings-API erweitern + neuer Tab in Einstellungsseite
+3. **Spender-API** – CRUD-Endpunkte + Fuzzy-Match-Suche
+4. **PDF-Template** – Amtliches BMF-Muster als `@react-pdf/renderer`-Komponente
+5. **Quittungs-API** – Erstellen, Speichern, E-Mail-Versand
+6. **UI-Dialog** – 3-Schritt-Erstellungsdialog + Einbindung in transaction-table
+7. **Historien-Seite** – Neue Admin-Seite mit Tabelle und Filtern
 
 ## QA-Testergebnisse
 _Wird von /qa hinzugefügt_
