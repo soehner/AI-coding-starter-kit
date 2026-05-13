@@ -38,6 +38,7 @@ import {
   Paperclip,
   MoreHorizontal,
   Pencil,
+  Receipt,
   Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -96,6 +97,10 @@ interface TransactionTableProps {
   onAbgleichOpen?: (transaction: Transaction) => void
   /** Löscht die angegebene Buchung (nur wenn canEdit). */
   onDeleteTransaction?: (id: string) => Promise<void>
+  /** PROJ-17: Öffnet den Spendenquittung-Erstellen-Dialog (nur Admin, nur Einnahmen). */
+  onSpendenquittungErstellen?: (transaction: Transaction) => void
+  /** PROJ-17: Steuert die Sichtbarkeit des Menüeintrags „Spendenquittung erstellen". */
+  canCreateSpendenquittung?: boolean
   allCategories?: Category[]
 }
 
@@ -181,6 +186,8 @@ export function TransactionTable({
   onDocumentsChanged,
   onAbgleichOpen,
   onDeleteTransaction,
+  onSpendenquittungErstellen,
+  canCreateSpendenquittung = false,
   allCategories = [],
 }: TransactionTableProps) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -694,6 +701,19 @@ export function TransactionTable({
                                 <Pencil className="mr-2 h-3.5 w-3.5" />
                                 Bearbeiten
                               </DropdownMenuItem>
+                              {/* PROJ-17: Spendenquittung erstellen — nur für Admins und nur bei Einnahmen */}
+                              {canCreateSpendenquittung &&
+                                onSpendenquittungErstellen &&
+                                isIncome && (
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      onSpendenquittungErstellen(t)
+                                    }
+                                  >
+                                    <Receipt className="mr-2 h-3.5 w-3.5" />
+                                    Spendenquittung erstellen
+                                  </DropdownMenuItem>
+                                )}
                               {onDeleteTransaction && (
                                 <>
                                   <DropdownMenuSeparator />

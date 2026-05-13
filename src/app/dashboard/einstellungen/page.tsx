@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase"
 import { useAuth } from "@/hooks/use-auth"
 import { ApiSettingsForm } from "@/components/api-settings-form"
 import { SeafileSettingsForm } from "@/components/seafile-settings-form"
+import { OrganisationEinstellungenForm } from "@/components/organisation-einstellungen-form"
 import { PasswordChangeDialog } from "@/components/password-change-dialog"
 import { MfaAktivierungDialog } from "@/components/mfa-aktivierung-dialog"
 import { MfaDeaktivierungDialog } from "@/components/mfa-deaktivierung-dialog"
@@ -118,6 +119,7 @@ export default function EinstellungenPage() {
     "kategorien",
     "regeln",
     "antrag-genehmiger",
+    "organisation",
     "sicherheit",
     "passwort",
   ])
@@ -165,6 +167,11 @@ export default function EinstellungenPage() {
                 Antrag-Genehmiger
               </TabsTrigger>
             )}
+            {isAdmin && (
+              <TabsTrigger value="organisation" className="px-2 md:px-3">
+                Organisation
+              </TabsTrigger>
+            )}
             <TabsTrigger value="sicherheit" className="px-2 md:px-3">
               Sicherheit
             </TabsTrigger>
@@ -202,6 +209,12 @@ export default function EinstellungenPage() {
         {isAdmin && (
           <TabsContent value="antrag-genehmiger" className="pt-4">
             <AntragGenehmigerVerwaltung />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="organisation" className="pt-4">
+            <OrganisationEinstellungenForm />
           </TabsContent>
         )}
 

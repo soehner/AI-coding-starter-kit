@@ -1,6 +1,6 @@
 # PROJ-17: Spendenquittung (Zuwendungsbestätigung)
 
-## Status: Geplant
+## Status: In Bearbeitung
 **Erstellt:** 2026-05-13
 **Zuletzt aktualisiert:** 2026-05-13
 
@@ -375,7 +375,197 @@ Alle anderen benötigten Bausteine (Resend, Supabase, shadcn/ui, Zod, react-hook
 7. **Historien-Seite** – Neue Admin-Seite mit Tabelle und Filtern
 
 ## QA-Testergebnisse
-_Wird von /qa hinzugefügt_
+
+**Getestet:** 2026-05-13
+**Testart:** Statischer Code-Review (kein Browser-Test)
+**Tester:** QA-Ingenieur (KI, Red-Team-Perspektive)
+**Build-Status:** `npx tsc --noEmit` sauber, `npm run lint` sauber, `npm run build` sauber (laut Aussage)
+
+### Status der Akzeptanzkriterien
+
+#### Organisationseinstellungen
+
+- [x] **Abschnitt „Organisation & Freistellungsbescheid"** vorhanden — `src/components/organisation-einstellungen-form.tsx:241`, neuer Tab in `src/app/dashboard/einstellungen/page.tsx`.
+- [x] **Alle Pflichtfelder vorhanden** — `verein_name`, `adresse_zeile1`, `adresse_zeile2`, `plz`, `ort`, `steuernummer`, `finanzamt`, `freistellungsbescheid_datum` (Datumspicker), `freistellungsbescheid_aktenzeichen`, `satzungszweck` (Textarea), `unterzeichner_name`, `letzter_veranlagungszeitraum`. Plus optionale Vorstand-Felder für CC.
+- [x] **Validierung Pflichtfelder vor Quittungserstellung** — Server prüft per `findFehlendeOrganisationsfelder()` in `src/app/api/admin/spendenquittungen/route.ts:194-204`; UI blockiert per `orgFehlt`-State im Dialog (`spendenquittung-erstellen-dialog.tsx:520-530`).
+- [x] **Warnung wenn Bescheid > 4 Jahre** — `bescheidAelterAls(4)` in `organisation-einstellungen-form.tsx:214` zeigt Alert (amber), nicht blockierend.
+- [x] **Nur Administratoren ändern Organisation** — `requireAdmin()` in `src/app/api/admin/settings/route.ts:92`. Tab nur für Admins sichtbar (`einstellungen/page.tsx:170`).
+
+#### Spender-Datenbank
+
+- [x] **Spender-Datensatz vollständig** — Tabelle `spender` (Migration 027) mit allen geforderten Spalten.
+- [x] **Fuzzy-Match auf `counterpart`** — `/api/admin/spender/suggest` nutzt pg_trgm `similarity()` ≥ 0.4 via RPC `spender_fuzzy_suche` (Migration 028) + Fallback auf `ilike`.
+- [x] **Neuer Spender + Verknüpfung mit Quittung** — `spender_neu`-Branch im Create-Endpoint (`spendenquittungen/route.ts:231-264`).
+- [x] **Vorbefüllung bei wiederkehrendem Spender (IBAN)** — IBAN-Lookup hat Priorität 1 in `suggest/route.ts:48-64`.
+
+#### Quittungs-Erstellung
+
+- [x] **„Spendenquittung erstellen"-Eintrag im Kontextmenü** — `transaction-table.tsx` Diff: nur bei `canCreateSpendenquittung && isIncome` (`amount > 0`).
+- [x] **Formular füllt automatisch vor** — `useEffect` in `spendenquittung-erstellen-dialog.tsx:150-178` übernimmt Betrag, Datum, Counterpart-Name, IBAN aus Transaction.
+- [x] **Pflichtfelder hervorgehoben** — `<span className="text-destructive">*</span>` neben jedem Pflichtlabel, `aria-required="true"`.
+- [x] **Betrag in Worten serverseitig** — `betragInWorten()` (`lib/betrag-in-worten.ts`) wird ausschließlich im PDF-Renderer `spendenquittung-pdf.tsx:251` aufgerufen, kein Client-Input.
+- [x] **Quittungs-Nummer race-condition-sicher** — RPC `next_spendenquittung_nummer` mit `SECURITY DEFINER` + UNIQUE-Constraint auf `quittung_nummer` (Migration 027:74-116). ACHTUNG: Bei sehr hoher Parallelität könnten zwei Aufrufe gleichzeitig `MAX+1` ermitteln; der `UNIQUE`-Constraint fängt das im Insert ab, aber der API-Endpunkt hat keine Retry-Logik (siehe BUG-5).
+- [x] **PDF-Vorschau vor Download/Versand** — Schritt 3 zeigt `<object data={pdfUrl}>` mit Same-Origin-Proxy `/api/admin/spendenquittungen/[id]/pdf` (`spendenquittung-erstellen-dialog.tsx:867-885`).
+- [x] **PDF entspricht BMF-Muster** — Wortlaut Pflichthinweise nach § 10b Abs. 4 EStG / § 63 Abs. 5 AO korrekt (`spendenquittung-pdf.tsx:172-182`). „gez. + elektronisch ausgestellt"-Vermerk vorhanden. Eine Seite, A4.
+- [x] **Pflichtfelder im PDF** — Alle Felder aus der Tabelle (Verein, Adresse, Steuer-Nr., Finanzamt, Bescheid-Datum, Aktenzeichen über Freistellungs-Hinweis, Spender, Betrag in Ziffern + Worten, Datum, Quittungs-Nr., Ausstellungsdatum, Haftungs- und 10-Jahres-Hinweis) sind enthalten.
+- [x] **PDF in Storage gespeichert** — `pdfPfad = ${jahr}/${quittungNummer}.pdf`, Bucket `spendenquittungen` privat (`spendenquittungen/route.ts:326-342`).
+- [x] **Quittung in DB vor E-Mail** — Insert vor `defaultEmailVorlage`; E-Mail-Endpoint ist separat (`/email`-Subroute), wird erst durch Frontend nach erfolgreichem Create getriggert.
+- [x] **Resend mit PDF-Anhang** — `spendenquittung-email.ts:83-89` schickt Base64-Anhang. Betreff + Text editierbar.
+- [x] **`email_versendet_am` und `email_empfaenger` protokolliert** — `email/route.ts:137-144`.
+- [x] **Mehrere Quittungen pro Buchung** — FK `transaction_id` ohne UNIQUE, ON DELETE SET NULL. Es gibt jedoch **keinen Warnhinweis** beim Erstellen einer zweiten Quittung für dieselbe Buchung (siehe BUG-2).
+
+#### Quittungs-Historie
+
+- [x] **Separate Admin-Seite** — `/dashboard/spendenquittungen` mit Link in `app-header.tsx`.
+- [x] **Tabellenansicht mit allen Spalten** — `spendenquittungen-tabelle.tsx:307-323`: Nr., Spender, Betrag, Spende-Datum, Ausgestellt, E-Mail-Status, Buchung, Aktionen.
+- [x] **Filter Jahr / Spendername / Versandstatus** — `spendenquittungen/page.tsx:236-318`, URL-synchronisiert.
+- [x] **PDF erneut herunterladen** — Per Same-Origin-Endpunkt `/api/admin/spendenquittungen/[id]/pdf?download=1`.
+- [x] **„E-Mail erneut senden"-Funktion** — Eigener Dialog (`spendenquittungen-tabelle.tsx:649-783`).
+- [⚠️] **Verlinkung Buchung im Dashboard** — Link nutzt `/dashboard?search=<quittung_nummer>`, aber Dashboard-Suche filtert auf `description` (`/api/transactions/route.ts:351-353`). Eine Quittungs-Nr. wie `SQ-2026-0001` taucht in keiner Description auf → Ergebnisliste ist immer leer. **Bug**, siehe BUG-1.
+- [x] **Betrachter: nur Lesen** — RLS lässt SELECT für `auth.uid() IS NOT NULL`, alle Schreibrouten via `requireAdmin()`. Im UI: `canEdit={isAdmin}` blendet Bearbeiten/Löschen/E-Mail aus. Lesezugriff im PDF-Endpunkt korrekt umgesetzt.
+
+### Status der Randfälle
+
+- [x] **Organisationseinstellungen fehlen** — Server gibt 400 mit `fehlende_felder`-Liste; UI zeigt destruktiven Alert mit Link zu den Einstellungen. `useEffect` prüft schon beim Öffnen des Dialogs.
+- [x] **Negativer Betrag (Ausgabe)** — Menüeintrag ist mit `isIncome` (amount > 0) geschützt. CHECK-Constraint `betrag > 0` in DB.
+- [x] **PSD2-Transaktion (`nur_psd2`)** — Keine Status-Prüfung im UI; PSD2-Transaktionen mit positivem Betrag erlauben die Quittung. Spec-konform.
+- [x] **Spendenbetrag > 300 €** — Keine besondere Einschränkung, alle Beträge bis 1.000.000 EUR erlaubt (`spendenquittungCreateSchema.betrag.max`).
+- [x] **E-Mail-Versand schlägt fehl** — Quittung bereits in DB + Storage; 502-Fehler im API, „E-Mail erneut senden" funktioniert.
+- [x] **Buchung gelöscht** — FK `ON DELETE SET NULL`, UI zeigt „[gelöscht]" (`spendenquittungen-tabelle.tsx:481-483`).
+- [x] **Bescheid > 5 Jahre** — Warnung im Form ab 4 Jahre, Quittungserstellung wird nicht blockiert.
+- [❌] **Mehrere Quittungen für dieselbe Buchung** — Spec fordert einen Warnhinweis „Für diese Buchung wurde bereits eine Quittung ausgestellt (SQ-JJJJ-NNNN)." — **kein Code, kein Hinweis**. Siehe BUG-2.
+- [x] **Sonderzeichen/Umlaute im Spendernamen** — Helvetica im `@react-pdf/renderer` unterstützt Standard-Latin-1; Umlaute funktionieren. Kein Encoding-Hack (kein ae/oe/ue).
+- [⚠️] **Sehr langer Vereins-/Spendername** — `@react-pdf/renderer` bricht Text automatisch um, aber bei extrem langen Strings (>200 Zeichen) könnte die Spender-Adresszeile horizontal überlaufen. Kein expliziter Wrap-Schutz im Style. Niedriges Risiko (DB-Limit 200 Zeichen).
+- [x] **E-Mail-Adresse unbekannt** — Schritt 3 erlaubt Schließen ohne Versand; Hinweis: „Quittung wurde bereits gespeichert und kann später aus der Historie versendet werden."
+
+### Sicherheitsaudit-Ergebnisse (Red-Team-Perspektive)
+
+- [x] **Authentifizierung** — Alle Endpunkte prüfen Auth: `/api/admin/spender/*` via `requireAdmin()`. `/api/admin/spendenquittungen/POST|PATCH|DELETE|email` via `requireAdmin()`. `/api/admin/spendenquittungen/GET` und `/[id]/GET` und `/[id]/pdf` prüfen Auth manuell, da Viewer Lesezugriff haben dürfen.
+- [x] **Autorisierung (Schreibzugriff)** — Viewer können keine Quittungen erstellen, ändern oder löschen. POST/PATCH/DELETE/email sind hinter `requireAdmin()`. Bestätigt durch manuelles Tracing aller Endpunkte.
+- [x] **Zod-Validierung aller Inputs** — `spenderSchema`, `spenderUpdateSchema`, `spendenquittungCreateSchema`, `spendenquittungUpdateSchema`, `spendenquittungEmailSchema`, `spendenquittungListQuerySchema`, `organisationSettingsSchema`. Alle Endpunkte verwenden `.safeParse()` und brechen mit 400 bei ungültigem Input ab.
+- [x] **Storage-URLs signiert** — `createSignedUrl(..., 5 * 60)` (5 Min TTL) in `[id]/route.ts:81-83`. Alternativ Same-Origin-Proxy mit Cache-Control `no-store`. Der Proxy umgeht zwar die signed-URL-Logik, ist aber auth-pflichtig — akzeptabel.
+- [x] **Storage-Bucket privat** — `public: false` (Migration 027:200) plus RLS-Policies, die Reads nur für `is_admin()` erlauben.
+- [x] **RLS auf Tabellen** — `spender` (alles admin-only), `spendenquittungen` (SELECT für eingeloggte, write admin-only). Korrekt.
+- [⚠️] **IDOR-Möglichkeit (BUG-3)** — RLS auf `spendenquittungen` erlaubt SELECT für **jeden** eingeloggten Benutzer. Damit kann auch ein eingeschränkter Viewer mit der UUID einer Quittung sowohl Metadaten als auch das PDF abrufen (PROJ-14-Kategoriefilter greift hier nicht). Spec sagt „Betrachter können die Historie lesen" — explizit gewünscht. Aber: Betrachter, die nur eingeschränkten Kategorienzugriff haben, sehen trotzdem **alle** Spender-Namen, -Beträge und PDFs. Das ist eine **Datenschutz-/DSGVO-Frage**, da Spender DSGVO-sensibel sind. Niedrig-Mittel.
+- [x] **XSS in E-Mail-Inhalten** — `escapeHtml()` in `spendenquittung-email.ts:32-39` escaped `&<>"'`. `\n` wird zu `<br>`. Korrekt.
+- [⚠️] **PostgREST `.or()`-Injection (BUG-4)** — In `spender/route.ts:30-32` wird `suche` mit `replace(/[%_]/g, "\\$&")` sanitisiert, aber **Kommas, Klammern und Sonderzeichen** der PostgREST-Filter-Syntax werden NICHT escaped. Ein Suchstring `",email.is.null,(` könnte die Filter-Logik verändern. Niedrig (Admin-only, kein Auth-Bypass), aber Code-Hygiene.
+- [x] **Rate-Limiting E-Mail-Versand** — 30 E-Mails / Stunde / Admin in `email/route.ts:14-16`. `isRateLimited` ist DB-basiert (`src/lib/rate-limit.ts`, korrekt für Vercel).
+- [x] **Rate-Limiting auf `requireAdmin()`** — 20 Anfragen / Min / IP global, In-Memory in `admin-auth.ts`. Nicht ideal für Serverless, aber bestehende Lösung — kein Regression-Schaden.
+- [x] **DSGVO – Recht auf Vergessenwerden** — `DELETE /api/admin/spender/[id]` löscht Spender, wenn keine Quittungen mehr existieren (409 sonst). UI weist auf das vor. Korrekt umgesetzt.
+- [⚠️] **DSGVO – Spender-Daten in Snapshot** — Beim Löschen eines Spenders bleiben dessen Daten im `verein_snapshot` der Quittungen erhalten. Allerdings enthält `verein_snapshot` nur Vereinsdaten, nicht Spenderdaten. **Spendername bleibt aber in `spender.name` indirekt referenziert über `ON DELETE RESTRICT`** — Spender kann erst gelöscht werden, wenn alle Quittungen gelöscht sind. Pragmatisch korrekt; eine echte Pseudonymisierungs-Funktion fehlt aber.
+- [x] **Keine Secrets im Code** — `RESEND_API_KEY`, `RESEND_FROM_EMAIL` aus Env.
+- [x] **CC ≠ Empfänger** — `spendenquittung-email.ts:66-68` filtert CC-Adressen, die mit Empfänger übereinstimmen (case-insensitive). Korrekt, kein Spam-Loop.
+- [x] **CSRF** — Alle mutierenden Endpunkte sind cookie-basiert auth + erwarten JSON-Body; durch SameSite-Cookies (Supabase-Defaults) und JSON-only-Akzeptanz ausreichend abgesichert.
+
+### Regressions-Audit (geänderte bestehende Dateien)
+
+- **`src/components/transaction-table.tsx`** — Nur additive Änderung: neuer optionaler Prop `onSpendenquittungErstellen` + `canCreateSpendenquittung`, neuer DropdownMenuItem hinter Feature-Flag. Keine Auswirkung auf bestehende Funktionalität.
+- **`src/app/api/admin/settings/route.ts`** — Wird um Organisations-Branch erweitert. Bestehende KI- und Seafile-Branches unverändert. Risiko: Reihenfolge `isOrganisationRequest` ist letztes `if` — wenn ein Body sowohl `organisation` als auch `seafile_url` enthält, würde nur Seafile gespeichert. In der Praxis aber kommt nur ein Bereich pro Request, daher unkritisch.
+- **`src/app/dashboard/einstellungen/page.tsx`** — Neuer Tab „Organisation" für Admins, valid-tabs-Liste erweitert. Keine Regression.
+- **`src/app/dashboard/page.tsx`** — Neuer State + Dialog-Einbindung; Übergabe an `transaction-table`. Saubere Erweiterung.
+- **`src/components/app-header.tsx`** — Neuer Nav-Link für alle eingeloggten Benutzer. Korrekt — auch Viewer dürfen die Seite sehen.
+- **`src/lib/types.ts`** — Nur additive Interfaces. Keine Brechung.
+
+### Gefundene Bugs
+
+#### BUG-1: Verlinkung von Quittung zur Buchung im Dashboard funktioniert nicht
+- **Schweregrad:** Mittel
+- **Datei/Zeile:** `src/components/spendenquittungen-tabelle.tsx:467`
+- **Beschreibung:** Der Link `<Link href="/dashboard?search=${quittung_nummer}">` führt zu Dashboard mit Suchparameter `search=SQ-2026-0001`. Das Dashboard filtert aber per `query.ilike("description", ...)` (`/api/transactions/route.ts:352`) — die Quittungs-Nummer steht **nicht** im Beschreibungstext einer Buchung, sondern nur in der `spendenquittungen`-Tabelle. Ergebnis: Klick öffnet eine leere Dashboard-Ansicht.
+- **Reproduktionsschritte:**
+  1. Quittung erstellen.
+  2. In `/dashboard/spendenquittungen` auf den Buchungs-Link in der Spalte „Buchung" klicken.
+  3. Erwartet: Die zugehörige Buchung wird hervorgehoben/gefiltert.
+  4. Tatsächlich: Dashboard zeigt leere Tabelle.
+- **Empfohlene Korrektur:** Entweder
+  (a) eigenen Query-Parameter `?transaction=<id>` einführen, der die einzelne Buchung anzeigt, oder
+  (b) Such-Backend so erweitern, dass es auch in verknüpften `spendenquittungen.quittung_nummer` matcht (RPC).
+- **Priorität:** Im nächsten Sprint beheben (kein Datenschutz-Problem, aber sichtbarer UX-Fehler).
+
+#### BUG-2: Kein Warnhinweis bei zweiter Quittung für dieselbe Buchung
+- **Schweregrad:** Mittel
+- **Datei/Zeile:** `src/app/api/admin/spendenquittungen/route.ts:165-401` (POST), `src/components/spendenquittung-erstellen-dialog.tsx`
+- **Beschreibung:** Die Spezifikation fordert explizit: „Zweite Quittung für dieselbe Buchung löst Warnhinweis aus: ‚Für diese Buchung wurde bereits eine Quittung ausgestellt (SQ-JJJJ-NNNN).'" Es existiert weder ein serverseitiger Check noch ein UI-Hinweis. Der Kassenwart kann versehentlich Doppel-Quittungen ausstellen.
+- **Reproduktionsschritte:**
+  1. Für Buchung X eine Quittung erstellen (z. B. SQ-2026-0001).
+  2. Für dieselbe Buchung X erneut „Spendenquittung erstellen" klicken.
+  3. Erwartet: Warnung mit Verweis auf SQ-2026-0001 (nicht blockierend).
+  4. Tatsächlich: Quittung wird kommentarlos ausgestellt.
+- **Empfohlene Korrektur:** Im POST-Endpunkt vor dem Erstellen prüfen, ob `transaction_id` bereits eine Quittung hat, und im 201-Response oder im Dialog (vor Schritt 2) eine Info-Meldung zurückgeben. Alternativ vor Schritt 2 eine GET-Anfrage `/api/admin/spendenquittungen?transaction_id=…`.
+- **Priorität:** Vor Deployment beheben — höheres Risiko von Doppel-Bestätigungen mit steuerlichen Folgen.
+
+#### BUG-3: Viewer sehen alle Spender-Personendaten ohne Kategorie-Filter
+- **Schweregrad:** Niedrig-Mittel (Datenschutz)
+- **Datei/Zeile:** Migration `027_proj17_spendenquittung.sql:157-159`
+- **Beschreibung:** RLS-Policy `Eingeloggte koennen Spendenquittungen lesen USING (auth.uid() IS NOT NULL)` erlaubt jedem eingeloggten Benutzer den Lesezugriff. PROJ-14 (Kategoriebasierter Zugriff) wird hier nicht angewandt. Damit sehen auch eingeschränkte Viewer alle Spender-Namen, Adressen (über JOIN auf `spender`), Beträge, IBANs und sogar das PDF. Spec sagt „Betrachter können die Historie lesen" — das ist gewünscht, aber DSGVO-mäßig sollte man prüfen, ob das gewollt ist, da Spender-Daten zu den sensibleren Vereinsdaten zählen.
+- **Reproduktionsschritte:**
+  1. Viewer-Account anlegen (kategoriebasierter Zugriff auf z. B. nur „Mitgliedsbeiträge").
+  2. `/dashboard/spendenquittungen` aufrufen.
+  3. Erwartet: ggf. nur Quittungen aus erlaubten Kategorien, oder anonymisierte Liste.
+  4. Tatsächlich: vollständige Liste aller Spender mit Namen, Adressen, IBANs, Beträgen.
+- **Empfohlene Korrektur:** Mit Auftraggeber klären, ob das gewünscht ist. Falls nicht: RLS-Policy auf `spender` und `spendenquittungen` so anpassen, dass Viewer nur Quittungen aus erlaubten Kategorien sehen.
+- **Priorität:** Wäre schön (Klärungsbedarf mit Stakeholder; Spec ist nicht eindeutig).
+
+#### BUG-4: PostgREST `.or()`-Filter nicht vollständig escaped
+- **Schweregrad:** Niedrig
+- **Datei/Zeile:** `src/app/api/admin/spender/route.ts:27-32`
+- **Beschreibung:** `replace(/[%_]/g, "\\$&")` schützt nur vor SQL-LIKE-Wildcards. Die PostgREST-Filter-Syntax `.or("name.ilike.%X%,email.ilike.%X%")` interpretiert Kommas und Klammern als Separator. Ein Suchstring wie `"abc,role.eq.admin"` oder `")"`könnte den Filter umfunktionieren. Da `requireAdmin()` aktiv ist und nur Admins suchen, kein Auth-Bypass — aber Code-Hygiene und Robustheit.
+- **Reproduktionsschritte:** Admin gibt im Spender-Suche-Feld eine Zeichenkette mit Komma ein. Anfrage bricht oder filtert falsch.
+- **Empfohlene Korrektur:** Suchstring zusätzlich gegen `,()` filtern oder PostgREST-Quoting (Doublequotes um den Wert) verwenden.
+- **Priorität:** Im nächsten Sprint beheben.
+
+#### BUG-5: Quittungs-Nummer-RPC ohne Retry/Lock
+- **Schweregrad:** Niedrig
+- **Datei/Zeile:** Migration `027_proj17_spendenquittung.sql:84-116`, `src/app/api/admin/spendenquittungen/route.ts:266-277`
+- **Beschreibung:** Die RPC `next_spendenquittung_nummer` ermittelt `MAX(...) + 1` per SELECT, ohne explizites Locking (`FOR UPDATE` oder Advisory Lock). Bei zwei gleichzeitigen Aufrufen können beide dasselbe Resultat erhalten. Der UNIQUE-Constraint auf `quittung_nummer` fängt das im INSERT ab, der API-Endpunkt hat aber **keine Retry-Logik** → eine der zwei Anfragen schlägt mit „PDF konnte nicht gespeichert werden / Quittung konnte nicht gespeichert werden" fehl, und das PDF des Verlierers ist bereits im Storage (kein Cleanup vor INSERT-Fehler — Cleanup gibt es nur danach).
+- **Auswirkung:** Sehr selten (Einzelnutzer-Anwendung), aber im Fehlerfall verbleibt eine verwaiste PDF-Datei.
+- **Empfohlene Korrektur:** In der RPC `pg_advisory_xact_lock(hashtext('spendenquittung_nummer_' || v_year))` voranstellen, oder im API-Endpunkt einen Retry bei UNIQUE-Violation (Code `23505`) einbauen.
+- **Priorität:** Wäre schön (extrem unwahrscheinlich, Einzelnutzer-Setup).
+
+#### BUG-6: Validation `spender_neu.iban` ohne Format-Prüfung
+- **Schweregrad:** Niedrig
+- **Datei/Zeile:** `src/lib/validations/spendenquittung.ts:44-47`, `src/lib/validations/spender.ts:38-42`
+- **Beschreibung:** IBAN wird nur auf max. 34 Zeichen geprüft, nicht auf gültiges IBAN-Format (Länderprüfung, Prüfziffer). Ein Admin könnte „ABC123" als IBAN eingeben.
+- **Empfohlene Korrektur:** Optional: Regex `/^[A-Z]{2}\d{2}[A-Z0-9]+$/` plus Mod-97-Prüfung. Da der Eintrag durch Admin manuell erfolgt, niedrige Priorität.
+- **Priorität:** Wäre schön.
+
+#### BUG-7: PDF-Pfad enthält `quittung_nummer` ohne Path-Encoding
+- **Schweregrad:** Niedrig
+- **Datei/Zeile:** `src/app/api/admin/spendenquittungen/route.ts:328`
+- **Beschreibung:** `pdfPfad = ${jahr}/${quittungNummer}.pdf` wird aus DB-RPC-Output gebildet. Da die RPC den Pfad erzeugt und der CHECK-Constraint `^SQ-\d{4}-\d{4,}$` greift, ist das aktuell sicher. Code-Robustheit: Eine zusätzliche Validierung der Form `quittungNummer` im API-Endpunkt nach dem RPC-Call wäre defensiver.
+- **Priorität:** Wäre schön (aktuell kein konkretes Sicherheitsproblem).
+
+### Zusammenfassung
+
+- **Akzeptanzkriterien:** 28/29 bestanden, 1 teilweise (Buchungs-Link BUG-1)
+- **Randfälle:** 9/11 bestanden, 1 nicht behandelt (BUG-2 Doppel-Quittung), 1 teilweise (sehr lange Namen)
+- **Gefundene Bugs:** 7 gesamt
+  - 0 kritisch
+  - 2 mittel (BUG-1, BUG-2)
+  - 1 niedrig-mittel (BUG-3 DSGVO/Stakeholder-Klärung)
+  - 4 niedrig (BUG-4, BUG-5, BUG-6, BUG-7)
+- **Sicherheit:** Grundsätzlich solide. Auth/Authz korrekt, Zod-Validierung überall, Rate-Limit auf E-Mail, RLS aktiviert, keine Secrets im Code, XSS in E-Mails escaped, signierte URLs mit kurzem TTL.
+- **Regression:** Keine negativen Auswirkungen auf bestehende Features. Alle Änderungen an `transaction-table.tsx`, `settings/route.ts`, `app-header.tsx` sind additive.
+- **Produktionsreif:** **JA mit Vorbehalt** — BUG-2 (Doppel-Quittungs-Warnung) sollte vor Live-Gang gefixt werden, da steuerlich relevant. BUG-1 (Buchungs-Link) ist UX-Bug und kann im nächsten Sprint behoben werden. Alle anderen sind „nice to have".
+- **Empfehlung:** **Vor Deployment: BUG-2 fixen.** Danach Go für Production. BUG-3 mit Auftraggeber klären — sind Spender-Daten für Viewer (auch eingeschränkte) bewusst freigegeben?
+
+### Bug-Behebungen (Nachgeführt 2026-05-13)
+
+Alle 7 Bugs aus dem ersten QA-Audit wurden behoben. Build (TypeScript + ESLint + `npm run build`) läuft sauber.
+
+| Bug | Fix |
+|-----|-----|
+| **BUG-1** | Buchungs-Link in der Quittungs-Historie nutzt jetzt `/dashboard?transaction=<id>` statt der Volltext-Suche. Neuer Query-Parameter `transaction` in `transactionsQuerySchema` und im Dashboard-State; bei aktivem Filter erscheint ein Hinweis-Banner mit „Filter entfernen". |
+| **BUG-2** | Beim Öffnen des Erstellungs-Dialogs prüft das Frontend per `GET /api/admin/spendenquittungen?transaction_id=<id>`, ob bereits Quittungen für die Buchung existieren. Falls ja, erscheint ein gelber Warnhinweis mit den vorhandenen Quittungs-Nummern. Listen-API hat dafür den neuen Filter `transaction_id` erhalten. |
+| **BUG-3** | Migration 029: Neue RLS-Policy `Spendenquittungen-Lesezugriff respektiert PROJ-14` ersetzt die alte permissive Policy. Admins und uneingeschränkte Benutzer sehen weiterhin alles; eingeschränkte Betrachter sehen nur Quittungen, deren `transaction_id` mindestens einer ihrer erlaubten Kategorien zugeordnet ist. Quittungen ohne Buchungsbezug (`transaction_id IS NULL`) sind für eingeschränkte Betrachter unsichtbar. |
+| **BUG-4** | PostgREST-`.or()`-Filter in `/api/admin/spender` filtert nun `(`, `)`, `,` und `*` aus dem Suchstring, zusätzlich zu den bestehenden LIKE-Wildcard-Escapes. |
+| **BUG-5** | Migration 029: `next_spendenquittung_nummer()` setzt jetzt einen transaktionsweiten Advisory-Lock pro Jahr (`pg_advisory_xact_lock(hashtext('spendenquittung_nummer_' \|\| jahr))`). Parallele Aufrufe werden sequentiell verarbeitet, keine verwaisten PDF-Dateien mehr möglich. |
+| **BUG-6** | Neuer IBAN-Validator `src/lib/validations/iban.ts` mit Format-Regex + Mod-97-Prüfung. Eingebunden in `spenderSchema.iban` und `spendenquittungCreateSchema.spender_neu.iban`. |
+| **BUG-7** | Defensiv-Check nach RPC-Call: Falls die zurückgegebene Quittungs-Nummer nicht dem Pattern `^SQ-\d{4}-\d{4,}$` entspricht, wird mit HTTP 500 abgebrochen, bevor das PDF in Storage geschrieben wird. |
+
+**Neuer Build-Status:** Lint sauber (0 Errors, 1 vorbestehende Warnung in `mfa-aktivierung-dialog.tsx`), TypeScript sauber, `npm run build` erfolgreich, neue Migration 029 erfolgreich in Supabase angewendet (Policy verifiziert).
+
+**Produktionsreife nach Fixes: JA** — keine Mittel- oder Kritisch-Bugs mehr offen.
 
 ## Deployment
 _Wird von /deploy hinzugefügt_

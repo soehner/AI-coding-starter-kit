@@ -14,6 +14,7 @@ import { EingeschraenkteBetrachterBanner } from "@/components/eingeschraenkte-be
 import { Psd2ConsentBanner } from "@/components/psd2-consent-banner"
 import { TransactionAbgleichDialog } from "@/components/transaction-abgleich-dialog"
 import { ManuellerAbgleichDialog } from "@/components/manueller-abgleich-dialog"
+import { SpendenquittungErstellenDialog } from "@/components/spendenquittung-erstellen-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -80,12 +81,23 @@ export default function DashboardPage() {
   const [onlyUnconfirmed, setOnlyUnconfirmed] = useState(
     searchParams.get("only_unconfirmed") === "true"
   )
+
+  // BUG-1-Fix: Direkt-Filter auf eine Buchung (Link aus Spendenquittungs-Historie).
+  const [transactionFilter, setTransactionFilter] = useState(
+    searchParams.get("transaction") || ""
+  )
   const [abgleichTransaction, setAbgleichTransaction] =
     useState<Transaction | null>(null)
   const [abgleichDialogOpen, setAbgleichDialogOpen] = useState(false)
 
   // Manueller Abgleich (zwei selbst ausgewählte Buchungen zusammenführen)
   const [manuellerAbgleichOpen, setManuellerAbgleichOpen] = useState(false)
+
+  // PROJ-17: Spendenquittung-Dialog
+  const [spendenquittungTransaction, setSpendenquittungTransaction] =
+    useState<Transaction | null>(null)
+  const [spendenquittungDialogOpen, setSpendenquittungDialogOpen] =
+    useState(false)
 
   // Daten-State
   const [summary, setSummary] = useState<TransactionSummary | null>(null)
@@ -136,6 +148,7 @@ export default function DashboardPage() {
       sort: sortBy,
       dir: sortDir,
       only_unconfirmed: onlyUnconfirmed ? "true" : "",
+      transaction: transactionFilter,
     })
   }, [
     year,
@@ -145,6 +158,7 @@ export default function DashboardPage() {
     sortBy,
     sortDir,
     onlyUnconfirmed,
+    transactionFilter,
     updateUrl,
   ])
 
@@ -252,6 +266,9 @@ export default function DashboardPage() {
       if (onlyUnconfirmed) {
         params.set("only_unconfirmed", "true")
       }
+      if (transactionFilter) {
+        params.set("transaction", transactionFilter)
+      }
       params.set("page", page.toString())
       params.set("sort", sortBy)
       params.set("dir", sortDir)
@@ -278,7 +295,7 @@ export default function DashboardPage() {
     } finally {
       setTableLoading(false)
     }
-  }, [year, month, debouncedSearch, categoryFilter, onlyUnconfirmed, page, sortBy, sortDir])
+  }, [year, month, debouncedSearch, categoryFilter, onlyUnconfirmed, transactionFilter, page, sortBy, sortDir])
 
   useEffect(() => {
     if (authLoading) return
@@ -575,6 +592,31 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* BUG-1-Fix: Hinweis-Banner bei aktivem Direkt-Filter auf eine Buchung
+          (kommt aus der Spendenquittungs-Historie via ?transaction=<id>). */}
+      {transactionFilter && (
+        <Alert>
+          <Link2 className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>
+              Es wird nur die verknüpfte Buchung aus einer Spendenquittung
+              angezeigt.
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setTransactionFilter("")
+                setPage(1)
+              }}
+            >
+              <X className="mr-1.5 h-3.5 w-3.5" />
+              Filter entfernen
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* KPI-Karten */}
       {summaryError ? (
         <Alert variant="destructive">
@@ -697,7 +739,22 @@ export default function DashboardPage() {
         onDeleteTransaction={
           hasPermission("edit_transactions") ? handleDeleteTransaction : undefined
         }
+        onSpendenquittungErstellen={(tx) => {
+          setSpendenquittungTransaction(tx)
+          setSpendenquittungDialogOpen(true)
+        }}
+        canCreateSpendenquittung={isAdmin}
         allCategories={allCategories}
+      />
+
+      {/* PROJ-17: Spendenquittung erstellen */}
+      <SpendenquittungErstellenDialog
+        open={spendenquittungDialogOpen}
+        onOpenChange={(open) => {
+          setSpendenquittungDialogOpen(open)
+          if (!open) setSpendenquittungTransaction(null)
+        }}
+        transaction={spendenquittungTransaction}
       />
 
       {/* PROJ-16: Abgleich-Dialog für Vorschläge/Konflikte */}

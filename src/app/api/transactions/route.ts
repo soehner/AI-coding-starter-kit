@@ -58,6 +58,19 @@ const transactionsQuerySchema = z.object({
   status: z
     .enum(["nur_psd2", "nur_pdf", "bestaetigt", "vorschlag", "konflikt"])
     .optional(),
+  /**
+   * BUG-1-Fix: Filter auf eine einzelne Buchungs-ID. Wird verwendet, wenn
+   * aus der Spendenquittungs-Historie auf die zugehörige Buchung verlinkt
+   * wird. Andere Filter werden zusätzlich angewendet (für UI-Konsistenz
+   * irrelevant, da nur eine Buchung getroffen wird).
+   */
+  transaction: z
+    .string()
+    .regex(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      "Ungültige Buchungs-ID."
+    )
+    .optional(),
 })
 
 export async function GET(request: Request) {
@@ -103,6 +116,7 @@ export async function GET(request: Request) {
       categories: searchParams.get("categories") || undefined,
       only_unconfirmed: searchParams.get("only_unconfirmed") || undefined,
       status: searchParams.get("status") || undefined,
+      transaction: searchParams.get("transaction") || undefined,
     }
 
     const validation = transactionsQuerySchema.safeParse(rawParams)
@@ -350,6 +364,11 @@ export async function GET(request: Request) {
 
     if (search) {
       query = query.ilike("description", `%${search}%`)
+    }
+
+    // BUG-1-Fix: Direkter Lookup auf eine Buchungs-ID (Link aus Quittungs-Historie).
+    if (validation.data.transaction) {
+      query = query.eq("id", validation.data.transaction)
     }
 
     // PROJ-16: Filter nach Abgleich-Status

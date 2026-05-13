@@ -381,3 +381,76 @@ export interface TransactionsResponse {
   pageSize: number
   totalPages: number
 }
+
+// ============================================================
+// PROJ-17: Spendenquittung (Zuwendungsbestätigung)
+// ============================================================
+
+/** Spender-Datensatz (wiederverwendbare Adresse) */
+export interface Spender {
+  id: string
+  name: string
+  strasse: string | null
+  plz: string | null
+  ort: string | null
+  email: string | null
+  iban: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Snapshot der Vereinsdaten zum Ausstellungszeitpunkt der Quittung.
+ * Wird in `spendenquittungen.verein_snapshot` als JSONB persistiert, damit
+ * spätere Änderungen an den Organisationseinstellungen die historische
+ * Quittung nicht mehr verändern.
+ */
+export interface VereinSnapshot {
+  verein_name: string
+  adresse_zeile1: string
+  adresse_zeile2: string
+  plz: string
+  ort: string
+  steuernummer: string
+  finanzamt: string
+  freistellungsbescheid_datum: string
+  freistellungsbescheid_aktenzeichen: string
+  satzungszweck: string
+  unterzeichner_name: string
+  letzter_veranlagungszeitraum: string
+}
+
+/** Ausgestellte Spendenquittung (unveränderliches Archiv-Objekt) */
+export interface Spendenquittung {
+  id: string
+  quittung_nummer: string
+  transaction_id: string | null
+  spender_id: string
+  betrag: number
+  spende_datum: string // YYYY-MM-DD
+  quittung_datum: string // YYYY-MM-DD
+  zweck: string
+  verein_snapshot: VereinSnapshot
+  pdf_path: string
+  email_versendet_am: string | null
+  email_empfaenger: string | null
+  erstellt_von: string
+  created_at: string
+}
+
+/** Listen-Antwort der Quittungs-Historie */
+export interface SpendenquittungenResponse {
+  spendenquittungen: (Spendenquittung & {
+    spender: Pick<Spender, "id" | "name" | "email">
+  })[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+/** Antwort von /api/admin/spender/suggest */
+export interface SpenderVorschlag extends Spender {
+  /** Ähnlichkeitsscore (0..1) aus pg_trgm similarity() */
+  similarity: number
+}

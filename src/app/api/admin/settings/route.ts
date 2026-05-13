@@ -4,6 +4,10 @@ import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { encrypt } from "@/lib/encryption"
 import { settingsSchema } from "@/lib/validations/import"
 import { seafileSettingsSchema } from "@/lib/validations/seafile"
+import {
+  organisationSettingsSchema,
+  ORGANISATION_SETTING_KEYS,
+} from "@/lib/validations/organisation"
 
 /** Alle Seafile-Schlüssel in app_settings */
 const SEAFILE_KEYS = [
@@ -15,7 +19,12 @@ const SEAFILE_KEYS = [
 ] as const
 
 /** Alle Schlüssel, die in GET zurückgegeben werden */
-const ALL_SETTING_KEYS = ["ki_provider", "ki_token", ...SEAFILE_KEYS] as const
+const ALL_SETTING_KEYS = [
+  "ki_provider",
+  "ki_token",
+  ...SEAFILE_KEYS,
+  ...ORGANISATION_SETTING_KEYS,
+] as const
 
 /**
  * GET /api/admin/settings
@@ -42,12 +51,35 @@ export async function GET() {
     // KI-Einstellungen (bestehend)
     provider: getValue("ki_provider") || "openai",
     hasToken: !!getValue("ki_token"),
-    // Seafile-Einstellungen (neu)
+    // Seafile-Einstellungen
     seafile_url: getValue("seafile_url"),
     hasSeafileToken: !!getValue("seafile_token"),
     seafile_repo_id: getValue("seafile_repo_id"),
     seafile_receipt_path: getValue("seafile_receipt_path"),
     seafile_statement_path: getValue("seafile_statement_path"),
+    // PROJ-17: Organisationseinstellungen (Vereinsdaten für Spendenquittung)
+    organisation: {
+      verein_name: getValue("org_verein_name"),
+      adresse_zeile1: getValue("org_adresse_zeile1"),
+      adresse_zeile2: getValue("org_adresse_zeile2"),
+      plz: getValue("org_plz"),
+      ort: getValue("org_ort"),
+      steuernummer: getValue("org_steuernummer"),
+      finanzamt: getValue("org_finanzamt"),
+      freistellungsbescheid_datum: getValue("org_freistellungsbescheid_datum"),
+      freistellungsbescheid_aktenzeichen: getValue(
+        "org_freistellungsbescheid_aktenzeichen"
+      ),
+      satzungszweck: getValue("org_satzungszweck"),
+      unterzeichner_name: getValue("org_unterzeichner_name"),
+      letzter_veranlagungszeitraum: getValue(
+        "org_letzter_veranlagungszeitraum"
+      ),
+      vorstand1_name: getValue("org_vorstand1_name"),
+      vorstand1_email: getValue("org_vorstand1_email"),
+      vorstand2_name: getValue("org_vorstand2_name"),
+      vorstand2_email: getValue("org_vorstand2_email"),
+    },
   })
 }
 
@@ -75,8 +107,9 @@ export async function POST(request: Request) {
   const rawBody = body as Record<string, unknown>
   const isSeafileRequest = "seafile_url" in rawBody || "seafile_repo_id" in rawBody
   const isKiRequest = "provider" in rawBody
+  const isOrganisationRequest = "organisation" in rawBody
 
-  if (!isSeafileRequest && !isKiRequest) {
+  if (!isSeafileRequest && !isKiRequest && !isOrganisationRequest) {
     return NextResponse.json(
       { error: "Keine erkennbaren Einstellungen im Request." },
       { status: 400 }
@@ -214,6 +247,75 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       message: "Seafile-Einstellungen erfolgreich gespeichert.",
+    })
+  }
+
+  // --- PROJ-17: Organisationseinstellungen speichern ---
+  if (isOrganisationRequest) {
+    const validation = organisationSettingsSchema.safeParse(rawBody.organisation)
+    if (!validation.success) {
+      const firstError =
+        validation.error.issues[0]?.message ?? "Ungültige Eingabe."
+      return NextResponse.json({ error: firstError }, { status: 400 })
+    }
+
+    const data = validation.data
+    const timestamp = new Date().toISOString()
+
+    // Mapping der Form-Felder auf die app_settings-Keys
+    const orgFields: { key: string; value: string }[] = [
+      { key: "org_verein_name", value: data.verein_name },
+      { key: "org_adresse_zeile1", value: data.adresse_zeile1 },
+      { key: "org_adresse_zeile2", value: data.adresse_zeile2 ?? "" },
+      { key: "org_plz", value: data.plz },
+      { key: "org_ort", value: data.ort },
+      { key: "org_steuernummer", value: data.steuernummer },
+      { key: "org_finanzamt", value: data.finanzamt },
+      {
+        key: "org_freistellungsbescheid_datum",
+        value: data.freistellungsbescheid_datum,
+      },
+      {
+        key: "org_freistellungsbescheid_aktenzeichen",
+        value: data.freistellungsbescheid_aktenzeichen,
+      },
+      { key: "org_satzungszweck", value: data.satzungszweck },
+      { key: "org_unterzeichner_name", value: data.unterzeichner_name },
+      {
+        key: "org_letzter_veranlagungszeitraum",
+        value: data.letzter_veranlagungszeitraum,
+      },
+      { key: "org_vorstand1_name", value: data.vorstand1_name ?? "" },
+      { key: "org_vorstand1_email", value: data.vorstand1_email ?? "" },
+      { key: "org_vorstand2_name", value: data.vorstand2_name ?? "" },
+      { key: "org_vorstand2_email", value: data.vorstand2_email ?? "" },
+    ]
+
+    for (const field of orgFields) {
+      const { error } = await adminClient.from("app_settings").upsert(
+        {
+          key: field.key,
+          value: field.value,
+          updated_by: profile.id,
+          updated_at: timestamp,
+        },
+        { onConflict: "key" }
+      )
+
+      if (error) {
+        console.error(
+          `Fehler beim Speichern von ${field.key}:`,
+          error.message
+        )
+        return NextResponse.json(
+          { error: `${field.key} konnte nicht gespeichert werden.` },
+          { status: 500 }
+        )
+      }
+    }
+
+    return NextResponse.json({
+      message: "Organisationseinstellungen erfolgreich gespeichert.",
     })
   }
 }

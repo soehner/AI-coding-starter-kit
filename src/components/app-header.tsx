@@ -20,6 +20,7 @@ import {
   FileUp,
   Home,
   LogOut,
+  Receipt,
   Settings,
   User,
   Users,
@@ -114,6 +115,12 @@ export function AppHeader() {
                     </Link>
                   </Button>
                 )}
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/dashboard/spendenquittungen">
+                    <Receipt className="mr-2 h-4 w-4" />
+                    Spendenquittungen
+                  </Link>
+                </Button>
               </nav>
 
               <Badge
@@ -187,6 +194,12 @@ export function AppHeader() {
                       </Link>
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem asChild className="md:hidden">
+                    <Link href="/dashboard/spendenquittungen">
+                      <Receipt className="mr-2 h-4 w-4" />
+                      Spendenquittungen
+                    </Link>
+                  </DropdownMenuItem>
                   {isAdmin && (
                     <>
                       <DropdownMenuSeparator className="md:hidden" />
