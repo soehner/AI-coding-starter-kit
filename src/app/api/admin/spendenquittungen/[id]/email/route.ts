@@ -4,12 +4,11 @@ import { requireAdmin } from "@/lib/admin-auth"
 import { createAdminSupabaseClient } from "@/lib/supabase-admin"
 import { spendenquittungEmailSchema } from "@/lib/validations/spendenquittung"
 import { sendeSpendenquittungEmail } from "@/lib/spendenquittung-email"
+import { rendereAktuelleSpendenquittungPdf } from "@/lib/spendenquittung-render"
 import { isRateLimited } from "@/lib/rate-limit"
 
 const uuidRegex =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-const PDF_BUCKET = "spendenquittungen"
 
 // Rate-Limit: 30 E-Mail-Versendungen pro Stunde pro Admin
 const EMAIL_RATE_LIMIT_MAX = 30
@@ -83,44 +82,24 @@ export async function POST(
   const { empfaenger, betreff, text, cc } = validation.data
   const supabase = createAdminSupabaseClient()
 
-  // Quittung laden, um den PDF-Pfad und die Nummer für den Dateinamen zu kennen
-  const { data: quittung, error: quittungError } = await supabase
-    .from("spendenquittungen")
-    .select("id, quittung_nummer, pdf_path")
-    .eq("id", id)
-    .single()
+  // PDF frisch aus den aktuellen Spenderdaten rendern – so enthält der
+  // Anhang immer die neuesten Daten, auch wenn der Spender nach dem
+  // Erstellen der Quittung korrigiert wurde.
+  const pdfResult = await rendereAktuelleSpendenquittungPdf(supabase, id)
 
-  if (quittungError || !quittung) {
+  if (!pdfResult.ok) {
     return NextResponse.json(
-      { error: "Quittung nicht gefunden." },
-      { status: 404 }
+      { error: pdfResult.error },
+      { status: pdfResult.status }
     )
   }
-
-  // PDF aus Storage herunterladen
-  const { data: pdfBlob, error: downloadError } = await supabase.storage
-    .from(PDF_BUCKET)
-    .download(quittung.pdf_path)
-
-  if (downloadError || !pdfBlob) {
-    console.error(
-      "PDF konnte nicht aus Storage geladen werden:",
-      downloadError?.message
-    )
-    return NextResponse.json(
-      { error: "PDF konnte nicht geladen werden." },
-      { status: 500 }
-    )
-  }
-
-  const pdfBuffer = Buffer.from(await pdfBlob.arrayBuffer())
 
   const result = await sendeSpendenquittungEmail({
     empfaenger,
     betreff,
     text,
-    pdfBuffer,
-    pdfDateiname: `${quittung.quittung_nummer}.pdf`,
+    pdfBuffer: pdfResult.pdfBuffer,
+    pdfDateiname: `${pdfResult.quittungNummer}.pdf`,
     cc,
   })
 
