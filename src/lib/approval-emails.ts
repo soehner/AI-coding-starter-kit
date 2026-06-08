@@ -25,6 +25,15 @@ function getFromEmail(): string {
   return from
 }
 
+/**
+ * Antwort-Adresse für ausgehende E-Mails. Der Absender (`from`) ist eine
+ * No-Reply-Adresse, daher leiten wir Antworten an ein echtes Postfach.
+ * Per `RESEND_REPLY_TO_EMAIL` überschreibbar.
+ */
+function getReplyToEmail(): string {
+  return process.env.RESEND_REPLY_TO_EMAIL || "soeh@cbs-mannheim.de"
+}
+
 function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
@@ -116,6 +125,7 @@ export async function sendApprovalRequestEmail(
   try {
     const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
+      replyTo: getReplyToEmail(),
       to: params.recipientEmail,
       subject: `Genehmigungsanfrage vom CBS-Förderverein`,
       html: `
@@ -226,6 +236,7 @@ export async function sendDecisionNotificationEmail(
   try {
     const { error: sendError } = await resend.emails.send({
       from: getFromEmail(),
+      replyTo: getReplyToEmail(),
       to: params.recipientEmail,
       subject: `Dein Genehmigungsantrag wurde ${params.finalDecision}`,
       html: `

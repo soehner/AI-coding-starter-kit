@@ -25,6 +25,15 @@ function getFromEmail(): string {
   return from
 }
 
+/**
+ * Antwort-Adresse für ausgehende E-Mails. Der Absender (`from`) ist eine
+ * No-Reply-Adresse, daher leiten wir Antworten an ein echtes Postfach.
+ * Per `RESEND_REPLY_TO_EMAIL` überschreibbar.
+ */
+function getReplyToEmail(): string {
+  return process.env.RESEND_REPLY_TO_EMAIL || "soeh@cbs-mannheim.de"
+}
+
 export function getSiteUrl(): string {
   if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
@@ -139,6 +148,7 @@ export async function sendInvitationEmail(
 
   const { error } = await resend.emails.send({
     from: getFromEmail(),
+    replyTo: getReplyToEmail(),
     to: email,
     subject: "Einladung zum CBS-Finanz-Portal",
     html,
