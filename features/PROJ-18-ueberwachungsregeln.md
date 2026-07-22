@@ -1,8 +1,9 @@
 # PROJ-18: Überwachungsregeln & E-Mail-Benachrichtigung bei verdächtigen Kontobewegungen
 
-## Status: In Review
+## Status: Deployed
 **Erstellt:** 2026-07-22
 **Zuletzt aktualisiert:** 2026-07-22
+**Live seit:** 2026-07-22 — QA bestanden (alle 4 Bugs behoben & verifiziert), Build/Lint/Typecheck grün, Browser-Test erfolgreich, nach `main` gepusht (Commit 187edd8).
 
 ## Abhängigkeiten
 - Benötigt: PROJ-1 (Authentifizierung) — Admin-Rolle für Regelverwaltung
