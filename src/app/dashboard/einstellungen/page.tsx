@@ -11,6 +11,7 @@ import { MfaAktivierungDialog } from "@/components/mfa-aktivierung-dialog"
 import { MfaDeaktivierungDialog } from "@/components/mfa-deaktivierung-dialog"
 import { KategorienVerwaltung } from "@/components/kategorien-verwaltung"
 import { KategorisierungsregelnListe } from "@/components/kategorisierungsregeln-liste"
+import { UeberwachungsregelnListe } from "@/components/ueberwachungsregeln-liste"
 import { AntragGenehmigerVerwaltung } from "@/components/antrag-genehmiger-verwaltung"
 import { Psd2VerbindungsKarte } from "@/components/psd2-verbindungs-karte"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -118,6 +119,7 @@ export default function EinstellungenPage() {
     "bankzugang",
     "kategorien",
     "regeln",
+    "ueberwachung",
     "antrag-genehmiger",
     "organisation",
     "sicherheit",
@@ -163,6 +165,11 @@ export default function EinstellungenPage() {
               </TabsTrigger>
             )}
             {isAdmin && (
+              <TabsTrigger value="ueberwachung" className="px-2 md:px-3">
+                Überwachung
+              </TabsTrigger>
+            )}
+            {isAdmin && (
               <TabsTrigger value="antrag-genehmiger" className="px-2 md:px-3">
                 Antrag-Genehmiger
               </TabsTrigger>
@@ -203,6 +210,12 @@ export default function EinstellungenPage() {
         {isAdmin && (
           <TabsContent value="regeln" className="pt-4">
             <KategorisierungsregelnListe />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="ueberwachung" className="pt-4">
+            <UeberwachungsregelnListe />
           </TabsContent>
         )}
 

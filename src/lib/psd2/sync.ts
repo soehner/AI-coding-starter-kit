@@ -6,6 +6,7 @@ import {
 import { berechneMatchingHash, euroZuCent } from "./matching-hash"
 import { sendeConsentRenewalEmail } from "@/lib/psd2-emails"
 import { applyCategorizationRules } from "@/lib/categorization-rules"
+import { pruefeUeberwachungsregeln } from "@/lib/ueberwachungsregeln"
 
 /**
  * PROJ-16: Zentrale Abruflogik für die BBBank über Enable Banking (PSD2).
@@ -43,6 +44,10 @@ export interface SyncErgebnis {
   autoZuweisungen?: number
   /** Warnung aus der Regel-Anwendung — blockiert den Sync nicht. */
   regelWarnung?: string
+  /** PROJ-18: Anzahl versendeter Überwachungs-Benachrichtigungen. */
+  ueberwachungBenachrichtigungen?: number
+  /** PROJ-18: Warnung aus der Überwachungsprüfung — blockiert den Sync nicht. */
+  ueberwachungWarnung?: string
 }
 
 export async function fuehreBankAbrufAus(
@@ -260,6 +265,29 @@ export async function fuehreBankAbrufAus(
     }
   }
 
+  // PROJ-18: Überwachungsregeln gegen die neu importierten Umsätze prüfen.
+  // Wie die Kategorisierung darf ein Fehler hier den Sync-Erfolg NICHT kippen —
+  // der PSD2-Import bleibt erfolgreich, die Prüfung wird beim nächsten Lauf
+  // erneut versucht.
+  let ueberwachungBenachrichtigungen = 0
+  let ueberwachungWarnung: string | undefined
+  if (neueTransaktionIds.length > 0) {
+    try {
+      const ergebnis = await pruefeUeberwachungsregeln(
+        client,
+        neueTransaktionIds
+      )
+      ueberwachungBenachrichtigungen = ergebnis.benachrichtigungen
+      if (ergebnis.warnung) {
+        ueberwachungWarnung = ergebnis.warnung
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err)
+      console.error("PSD2-Sync: Überwachungsprüfung fehlgeschlagen:", detail)
+      ueberwachungWarnung = `Überwachungsregeln konnten nicht geprüft werden: ${detail}`
+    }
+  }
+
   await client
     .from("psd2_verbindungen")
     .update({
@@ -281,6 +309,8 @@ export async function fuehreBankAbrufAus(
     autoKategorisiert,
     autoZuweisungen,
     regelWarnung,
+    ueberwachungBenachrichtigungen,
+    ueberwachungWarnung,
   }
 }
 

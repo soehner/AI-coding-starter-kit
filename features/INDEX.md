@@ -31,7 +31,8 @@
 | PROJ-15 | Zusammengesetzte Kategorisierungsregeln (UND/ODER) | Deployed | [PROJ-15-zusammengesetzte-regeln.md](PROJ-15-zusammengesetzte-regeln.md) | 2026-04-12 |
 | PROJ-16 | Direkter Bankabruf (PSD2) mit PDF-Abgleich | Deployed | [PROJ-16-psd2-bankabruf.md](PROJ-16-psd2-bankabruf.md) | 2026-04-13 |
 | PROJ-17 | Spendenquittung (Zuwendungsbestätigung) | In Progress | [PROJ-17-spendenquittung.md](PROJ-17-spendenquittung.md) | 2026-05-13 |
+| PROJ-18 | Überwachungsregeln & E-Mail-Benachrichtigung bei verdächtigen Kontobewegungen | In Review | [PROJ-18-ueberwachungsregeln.md](PROJ-18-ueberwachungsregeln.md) | 2026-07-22 |
 
 <!-- Add features above this line -->
 
-## Next Available ID: PROJ-18
+## Next Available ID: PROJ-19

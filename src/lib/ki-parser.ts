@@ -1,7 +1,14 @@
 import "@/lib/pdfjs-polyfills"
 import OpenAI from "openai"
 import Anthropic from "@anthropic-ai/sdk"
-import type { KiProvider, ParsedTransaction, ParsedStatementResult } from "@/lib/types"
+import type {
+  KiProvider,
+  ParsedTransaction,
+  ParsedStatementResult,
+  UeberwachungsRegelVorschlag,
+} from "@/lib/types"
+import { ueberwachungsBedingungSchema } from "@/lib/validations/ueberwachungsregeln"
+import { beschreibeUeberwachungsregel } from "@/lib/ueberwachungsregeln"
 
 const SYSTEM_PROMPT = `Du bist ein Experte für das Parsen von Kontoauszügen der Badischen Beamtenbank (BW-Bank).
 
@@ -200,6 +207,193 @@ function parseKiResponse(responseText: string): ParsedStatementResult {
   )
 
   return result
+}
+
+// ===========================================================================
+// PROJ-18: Übersetzung von Freitext-Überwachungsregeln in strukturiertes JSON
+// ===========================================================================
+
+const WATCH_RULE_PROMPT = `Du bist ein Assistent, der Überwachungsregeln für ein Vereins-Kassenbuch aus natürlicher Sprache in ein striktes JSON-Format übersetzt.
+
+Der Kassenwart beschreibt in eigenen Worten, wann er über eine Kontobewegung benachrichtigt werden möchte. Übersetze diese Beschreibung in eine strukturierte Regel.
+
+Es gibt zwei Regeltypen:
+1. "einzelbuchung": Die Regel prüft jede einzelne Buchung. Trifft sie zu, wird alarmiert.
+2. "muster": Die Regel erkennt wiederkehrende Buchungen über ein Zeitfenster (z.B. "derselbe kleine Betrag mehrfach im Monat" oder "Summe an einen Empfänger übersteigt X € in Y Tagen").
+
+Verfügbare Kriterien (Bausteine, die eine einzelne Buchung beschreiben):
+- {"type":"amount_range","min":<Zahl in Euro, absolut>,"max":<Zahl in Euro, absolut>,"direction":"out"|"in"|"both"}
+  direction: "out" = Abbuchung/Ausgang, "in" = Gutschrift/Eingang, "both" = egal. min/max sind IMMER positive Absolutbeträge.
+- {"type":"text_contains","term":"<Text im Verwendungszweck>"}
+- {"type":"counterpart_contains","term":"<Name des Empfängers/Auftraggebers>"}
+- {"type":"iban_equals","iban":"<IBAN der Gegenseite, Großbuchstaben, ohne Leerzeichen>"}
+
+Kriterien werden über "combinator" verknüpft: "AND" (alle müssen zutreffen) oder "OR" (mindestens eines).
+
+Bei regel_typ "muster" kommt zusätzlich ein "muster"-Objekt hinzu:
+- {"art":"anzahl","schwelle":<N>,"zeitfenster_tage":<X>}  → mindestens N passende Buchungen in X Tagen
+- {"art":"summe","schwelle":<Y in Euro>,"zeitfenster_tage":<X>} → Summe der passenden Buchungen übersteigt Y € in X Tagen
+
+Wichtige Regeln:
+- Antworte NUR mit validem JSON, ohne Erklärung, ohne Markdown.
+- Beträge sind IMMER positive Euro-Zahlen (Punkt als Dezimaltrennzeichen).
+- Wählst du "muster", MUSS ein "muster"-Objekt vorhanden sein. Bei "einzelbuchung" darf KEIN "muster"-Objekt vorhanden sein.
+- Formuliere einen kurzen, prägnanten "name_vorschlag" (max. 80 Zeichen).
+- Ist die Beschreibung nicht in eine sinnvolle Regel übersetzbar, gib {"error":"<kurze Begründung auf Deutsch>"} zurück.
+
+Antwortformat:
+{
+  "name_vorschlag": "Große Abbuchungen über 1000 €",
+  "regel_typ": "einzelbuchung",
+  "combinator": "AND",
+  "criteria": [
+    {"type":"amount_range","min":1000,"max":1000000,"direction":"out"}
+  ]
+}
+
+Beispiel Muster:
+{
+  "name_vorschlag": "Wiederkehrende Kleinbeträge",
+  "regel_typ": "muster",
+  "combinator": "AND",
+  "criteria": [
+    {"type":"amount_range","min":0,"max":100,"direction":"out"}
+  ],
+  "muster": {"art":"anzahl","schwelle":3,"zeitfenster_tage":31}
+}`
+
+interface RawWatchRuleResponse {
+  error?: string
+  name_vorschlag?: string
+  regel_typ?: string
+  combinator?: string
+  criteria?: unknown
+  muster?: unknown
+}
+
+/**
+ * Übersetzt einen Freitext in eine strukturierte Überwachungsregel.
+ * Nutzt dieselbe Provider-/Token-Infrastruktur wie der PDF-Parser.
+ *
+ * Wirft einen Error mit benutzerfreundlicher Meldung, wenn die KI keine
+ * gültige Regel liefert.
+ */
+export async function uebersetzeUeberwachungsregel(
+  freitext: string,
+  provider: KiProvider,
+  apiToken: string
+): Promise<UeberwachungsRegelVorschlag> {
+  const rohantwort =
+    provider === "anthropic"
+      ? await frageAnthropicText(WATCH_RULE_PROMPT, freitext, apiToken)
+      : await frageOpenAiText(WATCH_RULE_PROMPT, freitext, apiToken)
+
+  return verarbeiteWatchRuleAntwort(rohantwort)
+}
+
+async function frageAnthropicText(
+  systemPrompt: string,
+  userText: string,
+  apiToken: string
+): Promise<string> {
+  const client = new Anthropic({ apiKey: apiToken })
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 1024,
+    messages: [
+      {
+        role: "user",
+        content: `${systemPrompt}\n\nBeschreibung des Kassenwarts:\n"""${userText}"""`,
+      },
+    ],
+  })
+  const textBlock = response.content.find((block) => block.type === "text")
+  if (!textBlock || textBlock.type !== "text") {
+    throw new Error("Keine Textantwort von Anthropic erhalten.")
+  }
+  return textBlock.text
+}
+
+async function frageOpenAiText(
+  systemPrompt: string,
+  userText: string,
+  apiToken: string
+): Promise<string> {
+  const client = new OpenAI({ apiKey: apiToken })
+  const response = await client.chat.completions.create({
+    model: "gpt-4o",
+    max_tokens: 1024,
+    messages: [
+      {
+        role: "user",
+        content: `${systemPrompt}\n\nBeschreibung des Kassenwarts:\n"""${userText}"""`,
+      },
+    ],
+  })
+  const text = response.choices[0]?.message?.content
+  if (!text) {
+    throw new Error("Keine Antwort von OpenAI erhalten.")
+  }
+  return text
+}
+
+/**
+ * Parst und validiert die KI-Antwort strikt gegen das Regel-Schema.
+ * KI-Rohausgaben werden niemals ungeprüft weitergereicht.
+ */
+function verarbeiteWatchRuleAntwort(
+  responseText: string
+): UeberwachungsRegelVorschlag {
+  let jsonText = responseText.trim()
+
+  const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (jsonMatch) {
+    jsonText = jsonMatch[1].trim()
+  }
+
+  let parsed: RawWatchRuleResponse
+  try {
+    parsed = JSON.parse(jsonText) as RawWatchRuleResponse
+  } catch {
+    throw new Error(
+      "Die Regel konnte nicht verstanden werden. Bitte formuliere sie etwas klarer und versuche es erneut."
+    )
+  }
+
+  if (parsed.error) {
+    throw new Error(
+      `Die Regel konnte nicht übersetzt werden: ${parsed.error}`
+    )
+  }
+
+  // Strikte Validierung gegen das Zod-Schema (regel_typ + Kriterien + Muster).
+  const validation = ueberwachungsBedingungSchema.safeParse({
+    regel_typ: parsed.regel_typ,
+    combinator: parsed.combinator,
+    criteria: parsed.criteria,
+    muster: parsed.muster,
+  })
+
+  if (!validation.success) {
+    throw new Error(
+      "Die übersetzte Regel war nicht schlüssig. Bitte formuliere deine Beschreibung etwas konkreter und versuche es erneut."
+    )
+  }
+
+  const { regel_typ, combinator, criteria, muster } = validation.data
+  const bedingung = { combinator, criteria, ...(muster ? { muster } : {}) }
+
+  const nameVorschlag =
+    typeof parsed.name_vorschlag === "string" && parsed.name_vorschlag.trim()
+      ? parsed.name_vorschlag.trim().slice(0, 120)
+      : "Neue Überwachungsregel"
+
+  return {
+    name_vorschlag: nameVorschlag,
+    regel_typ,
+    bedingung,
+    zusammenfassung: beschreibeUeberwachungsregel(regel_typ, bedingung),
+  }
 }
 
 /**

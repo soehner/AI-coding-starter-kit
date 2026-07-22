@@ -233,6 +233,82 @@ export interface Psd2Status {
   aufeinanderfolgende_fehler?: number
 }
 
+// PROJ-18: Überwachungsregeln & E-Mail-Benachrichtigung
+export type UeberwachungsRegelTyp = "einzelbuchung" | "muster"
+
+// Kriterien-Vokabular für Überwachungsregeln. Übernimmt die erprobten
+// Bausteine der Kategorisierungsregeln und ergänzt `iban_equals`
+// (IBAN der Gegenseite), das für die Betrugserkennung wichtig ist.
+export type UeberwachungsCriterionType =
+  | "text_contains"
+  | "counterpart_contains"
+  | "amount_range"
+  | "iban_equals"
+
+export interface UeberwachungsTextContainsCriterion {
+  type: "text_contains"
+  term: string
+}
+
+export interface UeberwachungsCounterpartContainsCriterion {
+  type: "counterpart_contains"
+  term: string
+}
+
+export interface UeberwachungsAmountRangeCriterion {
+  type: "amount_range"
+  min: number
+  max: number
+  direction: AmountDirection
+}
+
+export interface UeberwachungsIbanEqualsCriterion {
+  type: "iban_equals"
+  iban: string
+}
+
+export type UeberwachungsCriterion =
+  | UeberwachungsTextContainsCriterion
+  | UeberwachungsCounterpartContainsCriterion
+  | UeberwachungsAmountRangeCriterion
+  | UeberwachungsIbanEqualsCriterion
+
+// Muster-Parameter: „N-mal in X Tagen" (anzahl) bzw.
+// „Summe > Y € in X Tagen" (summe).
+export interface UeberwachungsMuster {
+  art: "anzahl" | "summe"
+  schwelle: number
+  zeitfenster_tage: number
+}
+
+export interface UeberwachungsBedingung {
+  combinator: RuleCombinator
+  criteria: UeberwachungsCriterion[]
+  // Nur bei regel_typ = 'muster' gesetzt.
+  muster?: UeberwachungsMuster
+}
+
+export interface Ueberwachungsregel {
+  id: string
+  name: string
+  freitext_original: string | null
+  regel_typ: UeberwachungsRegelTyp
+  bedingung: UeberwachungsBedingung
+  empfaenger: string[]
+  ist_aktiv: boolean
+  sortierung: number
+  erstellt_am: string
+  erstellt_von: string | null
+}
+
+// Ergebnis der KI-Übersetzung (noch nicht gespeichert).
+export interface UeberwachungsRegelVorschlag {
+  name_vorschlag: string
+  regel_typ: UeberwachungsRegelTyp
+  bedingung: UeberwachungsBedingung
+  zusammenfassung: string
+}
+
 // PROJ-7: Granulare Feature-Berechtigungen
 export interface UserPermissions {
   user_id: string
